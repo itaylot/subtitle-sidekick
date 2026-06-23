@@ -1,0 +1,23 @@
+# Python / backend
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# מודלים / משקלים גדולים — לא נכנסים לגיט
+*.bin
+*.ct2
+models/
+*.wav
+*.mp3
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# logs
+*.log

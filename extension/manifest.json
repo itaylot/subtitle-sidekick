@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "Moodle Hebrew Subtitles",
+  "version": "1.0.0",
+  "description": "כתוביות בעברית בזמן אמת לסרטוני Moodle",
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.moodle.com/*",
+    "*://*.moodle.org/*",
+    "*://*.moodlecloud.com/*",
+    "*://moodle.*/*",
+    "*://*/moodle/*",
+    "*://*.ac.il/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Moodle Hebrew Subtitles"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.moodle.com/*",
+        "*://*.moodle.org/*",
+        "*://*.moodlecloud.com/*",
+        "*://moodle.*/*",
+        "*://*/moodle/*",
+        "*://*.ac.il/*"
+      ],
+      "js": ["content.js"],
+      "css": ["subtitles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["pcm-processor.js", "offscreen.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <title>הגדרות — כתוביות עברית ל-Moodle</title>
+    <style>
+      body {
+        font-family: system-ui, "Segoe UI", Arial, sans-serif;
+        max-width: 460px;
+        margin: 30px auto;
+        padding: 0 18px;
+        color: #1a1a1a;
+      }
+      h1 {
+        font-size: 19px;
+      }
+      label {
+        display: block;
+        margin: 16px 0 4px;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .hint {
+        font-weight: 400;
+        font-size: 12px;
+        color: #666;
+      }
+      input,
+      select {
+        width: 100%;
+        padding: 8px;
+        font-size: 14px;
+        box-sizing: border-box;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+      }
+      button {
+        margin-top: 20px;
+        padding: 9px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+        background: #5b4ce3;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      #saved {
+        margin-right: 12px;
+        color: #198754;
+        font-weight: 600;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      #saved.show {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>הגדרות כתוביות</h1>
+
+    <label for="endpoint">
+      כתובת שרת התמלול (WebSocket)
+      <span class="hint">ברירת מחדל: <code>ws://localhost:9090</code>. לשרת מרוחק חובה <code>wss://</code>.</span>
+    </label>
+    <input id="endpoint" type="text" placeholder="ws://localhost:9090" />
+
+    <label for="language">
+      שפה
+      <span class="hint">קוד שפה (he = עברית)</span>
+    </label>
+    <input id="language" type="text" placeholder="he" />
+
+    <label for="fontSize">גודל פונט הכתוביות (px)</label>
+    <input id="fontSize" type="number" min="14" max="64" placeholder="28" />
+
+    <label for="position">מיקום הכתוביות</label>
+    <select id="position">
+      <option value="bottom">תחתית הסרטון</option>
+      <option value="middle">אמצע הסרטון</option>
+    </select>
+
+    <div>
+      <button id="save">שמור</button>
+      <span id="saved">✓ נשמר</span>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -16,7 +16,7 @@ COPY server.py .
 # בקונטיינר מאזינים על כל הממשקים כדי ש-Caddy יוכל להגיע
 ENV MHS_HOST=0.0.0.0 \
     MHS_PORT=9090 \
-    MHS_MODEL=small \
+    MHS_MODEL=ivrit-ai/whisper-large-v3-turbo-ct2 \
     MHS_DEVICE=cpu \
     MHS_COMPUTE=int8
 

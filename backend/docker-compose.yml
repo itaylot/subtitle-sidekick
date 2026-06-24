@@ -9,7 +9,7 @@ services:
     environment:
       - MHS_HOST=0.0.0.0
       - MHS_PORT=9090
-      - MHS_MODEL=${MHS_MODEL:-small}
+      - MHS_MODEL=${MHS_MODEL:-ivrit-ai/whisper-large-v3-turbo-ct2}
       - MHS_DEVICE=${MHS_DEVICE:-cpu}
       - MHS_COMPUTE=${MHS_COMPUTE:-int8}
       - MHS_LANG=${MHS_LANG:-he}

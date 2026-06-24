@@ -23,7 +23,9 @@ import numpy as np
 import websockets
 from faster_whisper import WhisperModel
 
-MODEL = os.environ.get("MHS_MODEL", "small")
+# ברירת מחדל: מודל עברי ייעודי (ivrit.ai) — הכי מדויק לעברית.
+# למחשב חלש/איטי אפשר MHS_MODEL=small (גנרי, פחות מדויק אך קל ומהיר).
+MODEL = os.environ.get("MHS_MODEL", "ivrit-ai/whisper-large-v3-turbo-ct2")
 DEVICE = os.environ.get("MHS_DEVICE", "cpu")
 COMPUTE = os.environ.get("MHS_COMPUTE", "int8")
 LANG = os.environ.get("MHS_LANG", "he")

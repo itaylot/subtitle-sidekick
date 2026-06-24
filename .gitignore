@@ -2,8 +2,10 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv312/
 venv/
 env/
+he_result.txt
 *.egg-info/
 
 # מודלים / משקלים גדולים — לא נכנסים לגיט

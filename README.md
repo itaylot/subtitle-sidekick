@@ -1,45 +1,69 @@
-# Moodle Hebrew Subtitles
+# 🎬 כתוביות עברית בזמן אמת ל-Moodle
 
-תוסף Chrome (Manifest V3) שמתמלל את אודיו סרטוני Moodle לעברית בזמן אמת ומציג כתוביות overlay על הסרטון.
+תוסף Chrome (Manifest V3) שלוכד את אודיו ההרצאה בדף, מתמלל אותו לעברית בזמן אמת, ומציג כתוביות overlay על הסרטון — כמו כתוביות Netflix, רק חיות.
 
-> התוסף הוא JS/HTML/CSS סטטי. הוא שולח את האודיו לשרת תמלול (Whisper) ומקבל טקסט. **אין שום קריאה ל-Claude API בזמן ריצה.**
+> תוסף סטטי (JS/HTML/CSS) + שרת תמלול קטן שרץ בצד. **אין תלות ב-API חיצוני בזמן ריצה, ואין עלות למשתמש.**
 
-## מבנה הריפו
+---
+
+## ✨ מה הוא עושה
+
+- 🎧 **לוכד את אודיו הטאב** (`chrome.tabCapture`) — עובד גם כשהסרטון בתוך iframe (המצב הנפוץ ב-Moodle).
+- 🔊 **לא קוטע את ההאזנה** — האודיו ממשיך להישמע רגיל תוך כדי הלכידה.
+- 🇮🇱 **תמלול עברי** דרך Whisper (מודל ייעודי לעברית), עם כתוביות זמניות (אפור) שמתייצבות לסופיות (לבן).
+- ⚙️ **ניתן להגדרה** — כתובת שרת, גודל פונט ומיקום הכתוביות (popup + עמוד הגדרות).
+
+## 🧠 איך זה עובד
 
 ```
-SUB-PRO/
-├── START_HERE.md           # סדר העבודה והצ'קפוינטים
-├── BUILD_SPEC.md           # האפיון הטכני המלא (מקור אמת)
-├── MULTI_AGENT_BUILD.md    # חלוקת הבנייה לסוכנים
-├── GOAL.md                 # היעד הסופי + בדיקת הקבלה ("מתי סיימנו")
-├── CONTRACTS.md            # החוזים הקפואים (A: הודעות פנימיות, B: WebSocket)
-├── README.md
-├── extension/              # ⬅️ זה מה שטוענים ב-Chrome (Load unpacked)
-│   ├── manifest.json       # [Lead]
-│   ├── service-worker.js   # [Capture]
-│   ├── offscreen.html/js   # [Capture]
-│   ├── pcm-processor.js    # [Capture] AudioWorklet — קובץ נפרד חובה
-│   ├── content.js          # [UI] כפתור + overlay
-│   ├── subtitles.css       # [UI]
-│   ├── popup.html/js       # [UI]
-│   ├── options.html/js     # [UI]
-│   ├── lib/
-│   └── icons/              # [Lead] placeholder
-└── backend/                # [Backend] שרת תמלול (WhisperLive) — נוצר בשלב מאוחר
+כפתור בדף  →  service-worker  →  offscreen document            →  שרת תמלול
+(content.js)   (tabCapture)       (AudioWorklet: PCM 16kHz)        (faster-whisper)
+     ▲                                   │  WebSocket (PCM)              │
+     └──────────  כתובית עברית  ◄─────────┴──────  partial / final  ◄────┘
 ```
 
-## איך מריצים (אחרי שהבנייה תושלם)
+הארכיטקטורה המלאה והנימוקים: [BUILD_SPEC.md](BUILD_SPEC.md). החוזים בין הרכיבים: [CONTRACTS.md](CONTRACTS.md).
 
-1. **שרת התמלול:** ראה `backend/README.md` (בדיקה מקומית: CPU + מודל קטן).
-2. **התוסף:** `chrome://extensions` → הפעל Developer mode → **Load unpacked** → בחר את תיקיית `extension/`.
-3. פתח דף Moodle עם וידאו → לחץ על כפתור "▶ כתוביות".
+## 🚀 התחלה מהירה
 
-## סטטוס בנייה
+```bash
+# 1. שרת תמלול (התחל מ-mock — בלי הורדת מודל)
+cd backend
+python -m venv .venv && .venv\Scripts\activate
+pip install websockets
+python mock_server.py            # מאזין על ws://localhost:9090
+```
 
-- [x] שלב 1 — Lead: שלד, `manifest.json`, `CONTRACTS.md`, icons.
-- [x] שלב 2 — Capture Agent (service-worker, offscreen, pcm-processor)
-- [x] שלב 2 — UI Agent (content, css, popup, options)
-- [x] שלב 2 — Backend Agent (mock + faster-whisper, חוזה B אומת)
-- [x] שלב 3 — אינטגרציה E2E ✅ **רמה A הושגה** — בדיקת הקבלה 1-7 ([GOAL.md](GOAL.md)) עברה מול שרת mock על YouTube: כתוביות עברית חיות על הסרטון, האודיו נשמר, עצירה נקייה.
+```text
+# 2. טען את התוסף ב-Chrome
+chrome://extensions  →  Developer mode  →  Load unpacked  →  בחר את תיקיית extension/
 
-➡️ **להרצה ולבדיקת הקבלה (רמה A):** [RUN.md](RUN.md)
+# 3. פתח דף עם וידאו בעברית ולחץ "▶ כתוביות"
+```
+
+לתמלול עברית **אמיתי** (faster-whisper, CPU/GPU): [backend/README.md](backend/README.md).
+הוראות הרצה מפורטות ובדיקת קבלה: [RUN.md](RUN.md).
+
+## 📁 מבנה
+
+```
+extension/     התוסף עצמו (זה מה שטוענים ב-Chrome)
+backend/       שרת התמלול — mock_server.py (בדיקה) + server.py (אמיתי)
+tools/         ui-mock.html — בדיקת ה-UI בלי הפייפליין המלא
+CONTRACTS.md   החוזים הקפואים (הודעות פנימיות + WebSocket)
+GOAL.md        הגדרת "סיימנו" + בדיקת הקבלה
+```
+
+## 📊 סטטוס
+
+✅ **רמה A — מוכן לשימוש ראשוני.** הצינור עובד מקצה-לקצה: כתוביות עברית חיות על הסרטון, האודיו נשמר, עצירה נקייה ([GOAL.md](GOAL.md), בדיקת הקבלה 1-7).
+
+**הבא בתור (רמה B — שיתוף עם חברים):** שרת GPU משותף עם `wss://`, כך שכל אחד רק מתקין את התוסף. לא דורש שינוי קוד.
+
+## 🔒 פרטיות
+
+אודיו ההרצאה נשלח לשרת התמלול. כשהשרת מקומי (`localhost`) — הכל נשאר על המחשב שלך.
+
+---
+
+<sub>נבנה כפרויקט סטודנטיאלי. עברית קוראת מימין לשמאל, וגם הכתוביות 🙂</sub>

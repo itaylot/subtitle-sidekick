@@ -1,0 +1,41 @@
+# docker-compose.yml — שרת תמלול משותף עם TLS אוטומטי (wss://).
+#
+# Caddy מספק HTTPS/wss אוטומטי (Let's Encrypt) ומעביר ל-stt:9090.
+# הגדר DOMAIN ב-.env (העתק מ-.env.example), ואז:  docker compose up -d --build
+
+services:
+  stt:
+    build: .
+    environment:
+      - MHS_HOST=0.0.0.0
+      - MHS_PORT=9090
+      - MHS_MODEL=${MHS_MODEL:-small}
+      - MHS_DEVICE=${MHS_DEVICE:-cpu}
+      - MHS_COMPUTE=${MHS_COMPUTE:-int8}
+      - MHS_LANG=${MHS_LANG:-he}
+    expose:
+      - "9090"
+    volumes:
+      # cache למודל כדי לא להוריד אותו מחדש בכל restart
+      - hf_cache:/root/.cache/huggingface
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - stt
+    restart: unless-stopped
+
+volumes:
+  hf_cache:
+  caddy_data:
+  caddy_config:

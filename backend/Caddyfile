@@ -1,0 +1,8 @@
+# Caddyfile — reverse proxy עם TLS אוטומטי.
+# {$DOMAIN} נלקח ממשתנה הסביבה DOMAIN (מ-.env). Caddy מוציא תעודת
+# Let's Encrypt אוטומטית ומעביר את חיבור ה-WebSocket אל שרת התמלול.
+# (Caddy מעביר Upgrade headers אוטומטית — wss עובד ללא הגדרה נוספת.)
+
+{$DOMAIN} {
+	reverse_proxy stt:9090
+}

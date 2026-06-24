@@ -1,10 +1,12 @@
 """app.py — אפליקציית כתוביות עברית להרצאות (ממשק מודרני, גרירה, בלי שורת פקודה).
 
 בוחרים או **גוררים** קובץ הרצאה → "צור כתוביות" → צופים עם כתוביות עברית מסונכרנות.
+מציג שלב נוכחי + אחוז + זמן משוער שנותר.
 """
 
 import os
 import json
+import time
 import queue
 import threading
 import webbrowser
@@ -23,13 +25,26 @@ CARD = "#26262e"
 CARD_BORDER = "#3a3a44"
 MUTED = "#9aa0aa"
 
-VIDEO_EXT = (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".mp3", ".m4a", ".wav")
+VIDEO_EXT = (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".mp3", ".m4a", ".wav", ".flac", ".ogg")
 
 
 def fmt_time(t: float) -> str:
+    """שניות -> HH:MM:SS,mmm (פורמט SRT)."""
     h = int(t // 3600); m = int((t % 3600) // 60); s = int(t % 60)
     ms = int(round((t - int(t)) * 1000))
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def human(sec: float) -> str:
+    """שניות -> טקסט קריא בעברית."""
+    sec = max(0, int(sec))
+    m, s = divmod(sec, 60)
+    if m >= 60:
+        h, m = divmod(m, 60)
+        return f"{h}:{m:02d} שע׳"
+    if m:
+        return f"{m}:{s:02d} דק׳"
+    return f"{s} שנ׳"
 
 
 VIEWER_TEMPLATE = """<!DOCTYPE html>
@@ -69,44 +84,40 @@ class App:
         self.q = queue.Queue()
 
         root.title("כתוביות עברית להרצאות")
-        root.geometry("660x680")
-        root.minsize(560, 600)
         ctk.set_appearance_mode("dark")
 
         wrap = ctk.CTkFrame(root, fg_color="transparent")
-        wrap.pack(fill="both", expand=True, padx=26, pady=22)
+        wrap.pack(fill="both", expand=True, padx=26, pady=20)
 
-        # כותרת
+        # ── כותרת ──
         ctk.CTkLabel(wrap, text="🎬  כתוביות עברית להרצאות",
-                     font=ctk.CTkFont("Segoe UI", 26, "bold")).pack(anchor="center", pady=(2, 2))
+                     font=ctk.CTkFont("Segoe UI", 26, "bold")).pack(pady=(0, 2))
         ctk.CTkLabel(wrap, text="גוררים הרצאה, יוצרים כתוביות, וצופים — הכל כאן.",
-                     font=ctk.CTkFont("Segoe UI", 14), text_color=MUTED).pack(anchor="center", pady=(0, 18))
+                     font=ctk.CTkFont("Segoe UI", 14), text_color=MUTED).pack(pady=(0, 16))
 
-        # אזור גרירה / בחירה
+        # ── אזור גרירה / בחירה ──
         self.drop = ctk.CTkFrame(wrap, fg_color=CARD, border_color=CARD_BORDER,
-                                 border_width=2, corner_radius=18, height=170)
-        self.drop.pack(fill="x", pady=(0, 16))
+                                 border_width=2, corner_radius=18, height=160)
+        self.drop.pack(fill="x", pady=(0, 14))
         self.drop.pack_propagate(False)
-        self.drop_icon = ctk.CTkLabel(self.drop, text="⬇️", font=ctk.CTkFont(size=40))
-        self.drop_icon.pack(pady=(28, 4))
+        self.drop_icon = ctk.CTkLabel(self.drop, text="⬇️", font=ctk.CTkFont(size=38))
+        self.drop_icon.pack(pady=(26, 2))
         self.drop_title = ctk.CTkLabel(self.drop, text="גררו לכאן קובץ הרצאה",
                                        font=ctk.CTkFont("Segoe UI", 17, "bold"))
         self.drop_title.pack()
         self.drop_sub = ctk.CTkLabel(self.drop, text="או לחצו לבחירת קובץ מהמחשב",
                                      font=ctk.CTkFont("Segoe UI", 13), text_color=MUTED)
         self.drop_sub.pack(pady=(2, 0))
-
         for w in (self.drop, self.drop_icon, self.drop_title, self.drop_sub):
             w.bind("<Button-1>", lambda e: self.choose())
             w.bind("<Enter>", lambda e: self._hover(True))
             w.bind("<Leave>", lambda e: self._hover(False))
-        # רישום יעד גרירה (על החלון כולו — גרירה לכל מקום עובדת)
         root.drop_target_register(DND_FILES)
         root.dnd_bind("<<Drop>>", self.on_drop)
 
-        # מצב דיוק/מהירות + כפתור ראשי
+        # ── מצב + כפתור ראשי ──
         row = ctk.CTkFrame(wrap, fg_color="transparent")
-        row.pack(fill="x", pady=(0, 14))
+        row.pack(fill="x", pady=(0, 12))
         self.mode = ctk.CTkSegmentedButton(row, values=["מדויק", "מהיר"],
                                            selected_color=ACCENT, selected_hover_color=ACCENT_HOVER)
         self.mode.set("מדויק")
@@ -120,24 +131,37 @@ class App:
                                     command=self.start, state="disabled")
         self.go_btn.pack(fill="x", pady=(0, 12))
 
-        self.prog = ctk.CTkProgressBar(wrap, height=12, corner_radius=6, progress_color=ACCENT)
+        # ── כרטיס סטטוס: שלב + פס + זמן ──
+        self.status_card = ctk.CTkFrame(wrap, fg_color=CARD, corner_radius=14)
+        self.status_card.pack(fill="x", pady=(0, 12))
+        self.stage_lbl = ctk.CTkLabel(self.status_card, text="מוכן להתחיל",
+                                      font=ctk.CTkFont("Segoe UI", 15, "bold"))
+        self.stage_lbl.pack(pady=(12, 6))
+        self.prog = ctk.CTkProgressBar(self.status_card, height=14, corner_radius=7,
+                                       progress_color=ACCENT)
         self.prog.set(0)
-        self.prog.pack(fill="x", pady=(0, 12))
+        self.prog.pack(fill="x", padx=18, pady=(0, 8))
+        self.detail_lbl = ctk.CTkLabel(self.status_card, text="בחרו קובץ כדי להתחיל",
+                                       font=ctk.CTkFont("Segoe UI", 12), text_color=MUTED)
+        self.detail_lbl.pack(pady=(0, 12))
 
+        # ── יומן תמלול ──
         self.log = ctk.CTkTextbox(wrap, font=ctk.CTkFont("Consolas", 12), corner_radius=12,
-                                  fg_color=CARD, wrap="word")
+                                  fg_color=CARD, wrap="word", height=120)
         self.log.pack(fill="both", expand=True, pady=(0, 12))
         self.log.configure(state="disabled")
 
+        # ── כפתור צפייה ──
         self.watch_btn = ctk.CTkButton(wrap, text="▶  צפה עם כתוביות", height=46,
                                        font=ctk.CTkFont("Segoe UI", 16, "bold"), corner_radius=12,
                                        fg_color=SUCCESS, hover_color="#16a34a",
                                        command=self.watch, state="disabled")
         self.watch_btn.pack(fill="x")
 
-    # ── עיצוב/אינטראקציה ───────────────────────────────────
+    # ── אינטראקציה ──
     def _hover(self, on):
-        self.drop.configure(border_color=ACCENT if on else CARD_BORDER)
+        if not self.video_path:
+            self.drop.configure(border_color=ACCENT if on else CARD_BORDER)
 
     def on_drop(self, event):
         files = self.root.tk.splitlist(event.data)
@@ -155,6 +179,9 @@ class App:
     def set_file(self, path):
         if not os.path.isfile(path):
             return
+        if os.path.splitext(path)[1].lower() not in VIDEO_EXT:
+            messagebox.showwarning("קובץ לא נתמך", "זה לא נראה כמו קובץ וידאו/אודיו. נסו קובץ אחר.")
+            return
         self.video_path = path
         self.drop_icon.configure(text="🎞️")
         self.drop_title.configure(text=os.path.basename(path), text_color="#ffffff")
@@ -162,6 +189,10 @@ class App:
         self.drop.configure(border_color=ACCENT)
         self.go_btn.configure(state="normal")
         self.watch_btn.configure(state="disabled")
+        self.stage_lbl.configure(text="מוכן להתחיל", text_color="#ffffff")
+        self.detail_lbl.configure(text="לחצו ״צור כתוביות״")
+        self.prog.configure(mode="determinate")
+        self.prog.set(0)
 
     def logmsg(self, s):
         self.log.configure(state="normal")
@@ -169,7 +200,7 @@ class App:
         self.log.see("end")
         self.log.configure(state="disabled")
 
-    # ── תמלול ──────────────────────────────────────────────
+    # ── תמלול ──
     def start(self):
         self.go_btn.configure(state="disabled")
         self.watch_btn.configure(state="disabled")
@@ -183,16 +214,17 @@ class App:
             fast = self.mode.get() == "מהיר"
             name = MODEL_FAST if fast else MODEL_ACCURATE
             if self.model is None or self.model_name != name:
-                self.q.put(("log", f"טוען מודל ({'מהיר' if fast else 'מדויק'})… בפעם הראשונה זו הורדה, סבלנות."))
+                self.q.put(("stage", ("load", "טוען מודל… (בפעם הראשונה מוריד, כמה דקות)")))
                 self.model = WhisperModel(name, device="cpu", compute_type="int8")
                 self.model_name = name
-            self.q.put(("log", "מתמלל… (על המעבד זה לוקח זמן — רץ פעם אחת)"))
+            self.q.put(("stage", ("trans", "מתמלל…")))
             segments, info = self.model.transcribe(
                 self.video_path, language="he", vad_filter=True, beam_size=5)
             dur = getattr(info, "duration", 0) or 0
             base = os.path.splitext(self.video_path)[0]
             srt = base + ".srt"
             cues = []
+            t0 = time.time()
             with open(srt, "w", encoding="utf-8") as fh:
                 n = 0
                 for seg in segments:
@@ -204,9 +236,12 @@ class App:
                     cues.append({"start": round(seg.start, 3), "end": round(seg.end, 3), "text": txt})
                     self.q.put(("log", f"[{fmt_time(seg.start)}] {txt}"))
                     if dur:
-                        self.q.put(("prog", min(0.99, seg.end / dur)))
+                        elapsed = time.time() - t0
+                        rate = seg.end / elapsed if elapsed > 0 else 0
+                        eta = (dur - seg.end) / rate if rate > 0 else 0
+                        self.q.put(("progress", (min(0.99, seg.end / dur), elapsed, eta)))
+            self.q.put(("stage", ("finalize", "מכין נגן…")))
             self.viewer_path = self.make_viewer(self.video_path, cues)
-            self.q.put(("prog", 1.0))
             self.q.put(("done", n))
         except Exception as e:  # noqa: BLE001
             self.q.put(("error", str(e)))
@@ -229,16 +264,39 @@ class App:
                 kind, val = self.q.get_nowait()
                 if kind == "log":
                     self.logmsg(val)
-                elif kind == "prog":
-                    self.prog.set(val)
+                elif kind == "stage":
+                    code, text = val
+                    self.stage_lbl.configure(text=text, text_color="#ffffff")
+                    if code == "load":
+                        self.prog.configure(mode="indeterminate")
+                        self.prog.start()
+                        self.detail_lbl.configure(text="מתכונן…")
+                    elif code == "trans":
+                        self.prog.stop()
+                        self.prog.configure(mode="determinate")
+                        self.prog.set(0)
+                    elif code == "finalize":
+                        self.prog.stop()
+                        self.prog.configure(mode="determinate")
+                        self.prog.set(0.99)
+                        self.detail_lbl.configure(text="כמעט סיימנו…")
+                elif kind == "progress":
+                    frac, elapsed, eta = val
+                    self.prog.set(frac)
+                    self.detail_lbl.configure(
+                        text=f"{int(frac * 100)}%      ·      נותרו בערך {human(eta)}      ·      עברו {human(elapsed)}")
                 elif kind == "done":
-                    self.logmsg(f"\n✓ נוצרו {val} כתוביות. אפשר לצפות!")
+                    self.prog.set(1.0)
+                    self.stage_lbl.configure(text=f"✓ מוכן! נוצרו {val} כתוביות", text_color=SUCCESS)
+                    self.detail_lbl.configure(text="לחצו ״צפה עם כתוביות״")
                     self.watch_btn.configure(state="normal")
                     self.go_btn.configure(state="normal")
                     return
                 elif kind == "error":
-                    messagebox.showerror("שגיאה", val)
-                    self.logmsg("שגיאה: " + val)
+                    self.prog.stop()
+                    self.stage_lbl.configure(text="אירעה שגיאה", text_color="#ef4444")
+                    self.detail_lbl.configure(text=str(val)[:80])
+                    messagebox.showerror("שגיאה", str(val))
                     self.go_btn.configure(state="normal")
                     return
         except queue.Empty:
@@ -259,7 +317,8 @@ def center(root, w, h):
 def main():
     root = Tk()
     App(root)
-    center(root, 660, 680)
+    center(root, 660, 720)
+    root.minsize(560, 640)
     root.mainloop()
 
 

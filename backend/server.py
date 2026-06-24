@@ -40,6 +40,11 @@ print(f"[stt] loading model={MODEL} device={DEVICE} compute={COMPUTE} ...")
 model = WhisperModel(MODEL, device=DEVICE, compute_type=COMPUTE)
 print("[stt] model ready")
 
+# מודל faster-whisper יחיד משותף לכל החיבורים. הוא אינו thread-safe לקריאות
+# תמלול מקבילות, ולכן נועלים — משתמש אחד מתמלל בכל רגע, השאר ממתינים מעט.
+# מספיק לקבוצת לימוד; לעומס גדול צריך כמה workers/GPU (ראה DEPLOY.md).
+model_lock = asyncio.Lock()
+
 
 def transcribe(buf: np.ndarray) -> str:
     """מתמלל buffer float32. vad_filter=True מפעיל Silero VAD (מונע הזיות בשקט)."""
@@ -76,7 +81,8 @@ async def handle(ws, *_):
             # partial — תוך כדי דיבור
             if since_partial >= PARTIAL_EVERY * SR:
                 since_partial = 0
-                text = await loop.run_in_executor(None, transcribe, buf)
+                async with model_lock:
+                    text = await loop.run_in_executor(None, transcribe, buf)
                 if text:
                     await ws.send(json.dumps(
                         {"type": "partial", "text": text, "is_final": False},
@@ -85,7 +91,8 @@ async def handle(ws, *_):
 
             # final — אחרי שקט מספק בסוף מבע
             if silence_run >= SILENCE_HANG * SR and buf.size > MIN_FINAL_SEC * SR:
-                text = await loop.run_in_executor(None, transcribe, buf)
+                async with model_lock:
+                    text = await loop.run_in_executor(None, transcribe, buf)
                 buf = np.zeros(0, dtype=np.float32)
                 since_partial = 0
                 silence_run = 0

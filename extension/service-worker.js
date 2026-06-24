@@ -9,6 +9,8 @@
 const OFFSCREEN_PATH = 'offscreen.html';
 
 // ברירות מחדל אם אין הגדרות שמורות ב-storage
+// ⚠️ רמה B (הפצה): שנה את ה-endpoint ל-`wss://<your-server>` של השרת המשותף
+//    לפני אריזה לחנות, כדי שמשתמשים לא יצטרכו להגדיר ידנית. ראה GOAL_LEVEL_B.md.
 const DEFAULT_CONFIG = {
   endpoint: 'ws://localhost:9090',
   language: 'he',
@@ -112,6 +114,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // הלכידה הסתיימה בצד offscreen (ws נסגר/שגיאה/STOP) — עדכן UI
     if (msg.tabId != null) notifyState(msg.tabId, false);
     if (msg.tabId === activeTabId) activeTabId = null;
+  } else if (msg.type === 'CAPTURE_STATUS' && msg.from === 'offscreen') {
+    // סטטוס חיבור (מתחבר/מחובר/מתחבר מחדש/שגיאה) → הצג הודעה ב-content
+    if (msg.tabId != null) {
+      chrome.tabs
+        .sendMessage(msg.tabId, { type: 'SHOW_NOTICE', status: msg.status, text: msg.message })
+        .catch(() => {});
+    }
   } else if (msg.type === 'GET_STATE') {
     // popup שואל מה המצב הנוכחי
     sendResponse({ active: activeTabId != null, activeTabId });

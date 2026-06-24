@@ -22,6 +22,7 @@
 ```js
 { type: 'SHOW_SUBTITLE', text: string, isFinal: boolean }
 { type: 'CAPTURE_STATE', active: boolean }   // לסנכרון מצב הכפתור/ה-UI
+{ type: 'SHOW_NOTICE', status: string, text: string }   // באנר סטטוס חיבור (connecting/reconnecting/error); text ריק = הסתר
 ```
 
 ### service-worker ↔ offscreen  (`chrome.runtime.sendMessage`, מסומן ב-`target:'offscreen'`)
@@ -33,6 +34,7 @@
 // offscreen → SW
 { type: 'TRANSCRIPT',    from: 'offscreen', tabId: number, text: string, isFinal: boolean }
 { type: 'CAPTURE_ENDED', from: 'offscreen', tabId: number, reason?: string }   // הלכידה הסתיימה (STOP/ws נסגר/שגיאה) → ה-SW משדר CAPTURE_STATE{active:false}
+{ type: 'CAPTURE_STATUS', from: 'offscreen', tabId: number, status: string, message: string }   // סטטוס חיבור → ה-SW מנתב כ-SHOW_NOTICE
 ```
 
 ### popup ↔ service-worker (אופציונלי — לסנכרון כפתור ה-popup)
@@ -44,6 +46,8 @@
 ```
 
 > **תוספת build (Lead, v1.1):** `CAPTURE_ENDED` ו-`GET_STATE` נוספו בזמן הבנייה. אדיטיביות ותואמות-אחורה — לא משנות את חוזה B ולא את זרימת ה-TRANSCRIPT.
+>
+> **תוספת build (Lead, v1.2 — רמה B):** `CAPTURE_STATUS` (offscreen→SW) ו-`SHOW_NOTICE` (SW→content) נוספו לעמידות — דיווח סטטוס חיבור ו-reconnection למשתמש. אדיטיביות ותואמות-אחורה.
 
 ### אובייקט ה-`Config` (נשלח מ-SW ל-offscreen בהודעת START)
 ה-SW בונה אותו מ-`chrome.storage.sync` (מה שה-UI שמר) + ה-`tabId`:

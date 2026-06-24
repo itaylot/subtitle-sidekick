@@ -14,8 +14,6 @@
     "*://*.moodle.com/*",
     "*://*.moodle.org/*",
     "*://*.moodlecloud.com/*",
-    "*://moodle.*/*",
-    "*://*/moodle/*",
     "*://*.ac.il/*",
     "*://*.youtube.com/*"
   ],
@@ -33,8 +31,6 @@
         "*://*.moodle.com/*",
         "*://*.moodle.org/*",
         "*://*.moodlecloud.com/*",
-        "*://moodle.*/*",
-        "*://*/moodle/*",
         "*://*.ac.il/*",
         "*://*.youtube.com/*"
       ],

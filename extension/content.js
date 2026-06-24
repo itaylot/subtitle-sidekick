@@ -80,13 +80,12 @@
     unwatchVideo();
     if (!v) return;
     watchedVideo = v;
-    v.addEventListener('pause', onVideoStop);
+    // עוצרים רק כשהסרטון נגמר — לא בהשהיה (השהיה לא דורשת הפעלה מחדש)
     v.addEventListener('ended', onVideoStop);
   }
 
   function unwatchVideo() {
     if (!watchedVideo) return;
-    watchedVideo.removeEventListener('pause', onVideoStop);
     watchedVideo.removeEventListener('ended', onVideoStop);
     watchedVideo = null;
   }

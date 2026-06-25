@@ -1,4 +1,3 @@
 # תלויות האפליקציה (Python 3.11/3.12)
 faster-whisper      # מנוע התמלול (מושך numpy/ctranslate2 וכו' לבד)
-customtkinter       # ממשק מודרני
-tkinterdnd2         # גרירת קבצים לחלון
+pywebview           # חלון שמרנדר את ה-UI (HTML/CSS) עם bridge ל-Python

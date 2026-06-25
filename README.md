@@ -36,8 +36,10 @@ python tools/transcribe_to_srt.py "הרצאה.mp4"        # יוצר הרצאה.
 ## 📁 מבנה
 
 ```
-app.py                      ⭐ האפליקציה (חלון גרפי)
-run.bat                     משגר האפליקציה (התקנה אוטומטית בפעם הראשונה)
+app.py                      משגר חלון pywebview + bridge ל-Python
+engine.py                   מנוע התמלול (faster-whisper / ivrit-ai)
+ui/                         ממשק המשתמש (HTML/CSS/JS + פונטים מקומיים)
+run.bat                     משגר (התקנה אוטומטית בפעם הראשונה)
 requirements.txt            תלויות
 tools/
   transcribe_to_srt.py      תמלול משורת פקודה: קובץ → SRT

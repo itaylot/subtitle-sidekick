@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>כתוביות עברית</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="theme-light">
+  <div class="win">
+    <!-- סרגל כותרת -->
+    <div class="bar">
+      <div class="appic">כ</div>
+      <div class="appname">כתוביות עברית</div>
+      <div class="barsp"></div>
+      <button class="themebtn" id="themeBtn" title="מצב בהיר/כהה">◐</button>
+      <div class="barx"><span class="d1"></span><span class="d2"></span><span class="d3"></span></div>
+    </div>
+
+    <div class="body">
+      <!-- ── מסך 1: פתיחה / גרירה ── -->
+      <section class="view" id="view-open">
+        <div class="kicker">בחירת קובץ</div>
+        <div class="drop2" id="drop">
+          <div class="dtile">↑</div>
+          <div class="dbig">שחררו כאן את ההרצאה</div>
+          <div class="dsub">MP4 · MKV · MOV — עד 4 שעות</div>
+          <div class="ordiv">או</div>
+          <button class="btn" id="pickBtn">בחרו קובץ מהמחשב</button>
+        </div>
+        <div class="footrow">
+          <div class="fast" id="fastToggle">
+            <span class="sw" id="fastSw"><span class="knob"></span></span>מצב מהיר
+          </div>
+          <div class="priv">🔒 הכול נשאר אצלכם במחשב</div>
+        </div>
+      </section>
+
+      <!-- ── מסך 2: עיבוד / התקדמות ── -->
+      <section class="view" id="view-proc" hidden>
+        <div class="kicker">יצירת כתוביות</div>
+        <div class="filechip"><span class="fcic">🎞</span><span id="procName"></span></div>
+        <div class="stage" id="stageHeading">מתמללת את ההרצאה לעברית…</div>
+        <div class="prog">
+          <div class="bar2" id="bar2"><div class="fill" id="fill"></div></div>
+          <div class="pct" id="pct">0%</div>
+        </div>
+        <div class="eta" id="eta"></div>
+        <div class="steps">
+          <div class="step" id="step-extract">אודיו</div>
+          <div class="step" id="step-transcribe">תמלול</div>
+          <div class="step" id="step-sync">סנכרון</div>
+        </div>
+        <div class="queue" id="queue"></div>
+      </section>
+
+      <!-- ── מסך 3: נגן ── -->
+      <section class="view" id="view-play" hidden>
+        <div class="kicker">צפייה</div>
+        <div class="screen">
+          <video id="video" preload="metadata"></video>
+          <div class="cc">CC עברית</div>
+          <div class="subline" id="subline"></div>
+        </div>
+        <div class="ctrls">
+          <button class="play" id="playBtn">▶</button>
+          <div class="track" id="track"><div class="pfill" id="pfill"></div></div>
+          <span class="tc" id="tc">0:00 / 0:00</span>
+          <button class="fsbtn" id="fsBtn" title="מסך מלא">⛶</button>
+        </div>
+        <button class="backbtn" id="backBtn">→ חזרה לרשימה</button>
+      </section>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

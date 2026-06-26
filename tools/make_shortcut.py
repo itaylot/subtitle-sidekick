@@ -1,4 +1,4 @@
-"""make_shortcut.py — יוצר קיצור דרך "כתוביות עברית" בשולחן העבודה.
+"""make_shortcut.py — יוצר קיצור דרך "Subtitle Sidekick" בשולחן העבודה.
 
 נקרא פעם אחת ע"י run.bat אחרי ההתקנה, כדי שלא צריך CMD יותר — רק האייקון.
 """
@@ -13,7 +13,7 @@ APP = os.path.join(ROOT, "app.py")
 PS = (
     "$d=[Environment]::GetFolderPath('Desktop');"
     "$w=New-Object -ComObject WScript.Shell;"
-    "$l=$w.CreateShortcut((Join-Path $d 'כתוביות עברית.lnk'));"
+    "$l=$w.CreateShortcut((Join-Path $d 'Subtitle Sidekick.lnk'));"
     f"$l.TargetPath='{PYW}';"
     f"$l.Arguments='\"{APP}\"';"
     f"$l.WorkingDirectory='{ROOT}';"

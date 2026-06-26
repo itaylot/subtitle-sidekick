@@ -91,7 +91,7 @@ def _register_drop(window):
 def main():
     api = Api()
     window = webview.create_window(
-        "כתוביות עברית",
+        "Subtitle Sidekick",
         url=INDEX,
         js_api=api,
         width=660,

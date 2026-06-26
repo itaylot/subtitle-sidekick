@@ -107,9 +107,9 @@ function renderQueue() {
 function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
 const STAGE_HEAD = {
-  extract: "מכינה את האודיו…",
-  transcribe: "מתמללת את ההרצאה לעברית…",
-  sync: "מסנכרנת את הכתוביות…",
+  extract: "מכין את האודיו…",
+  transcribe: "מתמלל את ההרצאה לעברית…",
+  sync: "מסנכרן את הכתוביות…",
 };
 const STAGE_ORDER = ["extract", "transcribe", "sync"];
 
@@ -126,7 +126,7 @@ window.onProgress = function (p) {
   if (p.loading) {
     $("bar2").classList.add("loading");
     $("pct").textContent = "";
-    $("eta").textContent = "טוענת את המודל העברי (בפעם הראשונה מורידה, כמה דקות)…";
+    $("eta").textContent = "טוען את המודל העברי (בפעם הראשונה מוריד, כמה דקות)…";
     return;
   }
   $("bar2").classList.remove("loading");

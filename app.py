@@ -31,6 +31,20 @@ class Api:
             return list(res)
         return None
 
+    # הורדת וידאו מקישור (yt-dlp) → אחרי שירד, נכנס לתור ומתמלל
+    def download(self, url):
+        threading.Thread(target=self._download, args=(url,), daemon=True).start()
+
+    def _download(self, url):
+        try:
+            path = engine.download(url, on_progress=lambda p: self._js("window.onDownload", p))
+            if path:
+                self._js("window.enqueueFiles", [path])
+            else:
+                self._js("window.onError", "ההורדה נכשלה — בדוק את הקישור")
+        except Exception as e:  # noqa: BLE001
+            self._js("window.onError", "הורדה נכשלה: " + str(e))
+
     # התחלת תמלול (לא חוסם — רץ ב-thread, מזרים התקדמות ל-UI)
     def start(self, path, fast):
         threading.Thread(target=self._run, args=(path, bool(fast)), daemon=True).start()

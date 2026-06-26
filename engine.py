@@ -143,6 +143,67 @@ def make_viewer(video, cues):
     return out
 
 
+def download(url, on_progress=None, browser="chrome"):
+    """מוריד וידאו מקישור (yt-dlp). מחזיר נתיב הקובץ שירד.
+
+    מנסה קודם עם cookies של הדפדפן (ל-Moodle מאחורי התחברות); אם נכשל —
+    מוריד בלי cookies (לקישורים ציבוריים כמו YouTube).
+    """
+    from yt_dlp import YoutubeDL
+
+    outdir = os.path.join(os.path.expanduser("~"), "Videos", "Subtitle Sidekick")
+    os.makedirs(outdir, exist_ok=True)
+    holder = {"path": None}
+
+    def hook(d):
+        if d.get("status") == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            done = d.get("downloaded_bytes") or 0
+            pct = int(done / total * 100) if total else 0
+            if on_progress:
+                on_progress({"percent": pct, "status": "downloading"})
+        elif d.get("status") == "finished":
+            holder["path"] = d.get("filename")
+            if on_progress:
+                on_progress({"percent": 100, "status": "finished"})
+
+    base_opts = {
+        "outtmpl": os.path.join(outdir, "%(title).80s.%(ext)s"),
+        "format": "best",          # קובץ יחיד (וידאו+אודיו) — בלי צורך ב-ffmpeg למיזוג
+        "progress_hooks": [hook],
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+    }
+
+    def run(with_cookies):
+        opts = dict(base_opts)
+        if with_cookies and browser:
+            opts["cookiesfrombrowser"] = (browser,)
+        with YoutubeDL(opts) as ydl:
+            ydl.extract_info(url, download=True)
+
+    # 1) ניסיון עם cookies (ל-Moodle מאחורי התחברות)
+    cookie_err = None
+    try:
+        run(True)
+        return holder["path"]
+    except Exception as e:  # noqa: BLE001
+        cookie_err = str(e)
+        holder["path"] = None
+
+    # 2) נפילה לבלי-cookies (לקישורים ציבוריים כמו YouTube)
+    try:
+        run(False)
+        return holder["path"]
+    except Exception as e2:  # noqa: BLE001
+        if "cookie" in cookie_err.lower() or "could not copy" in cookie_err.lower():
+            raise RuntimeError(
+                "ל-Moodle צריך להתחבר בכרום ואז לסגור אותו לגמרי (כדי שאפשר יהיה לקרוא את "
+                "ההתחברות), ולנסות שוב.")
+        raise RuntimeError(str(e2))
+
+
 def transcribe(video_path, fast=False, on_progress=None):
     """מתמלל קובץ → SRT + cues. on_progress(dict) נקרא לאורך הדרך."""
     global _model, _model_name, _device

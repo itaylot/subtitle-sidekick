@@ -2,3 +2,4 @@
 faster-whisper      # מנוע התמלול (מושך numpy/ctranslate2 וכו' לבד)
 pywebview           # חלון שמרנדר את ה-UI (HTML/CSS) עם bridge ל-Python
 python-docx         # ייצוא תמליל ל-Word
+yt-dlp              # הורדת וידאו מקישור (YouTube / Moodle / HLS)

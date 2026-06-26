@@ -168,6 +168,21 @@ body {
 .sw.on .knob { right: 17px; }
 .priv { font-size: 12px; color: var(--c2); }
 
+/* ── שדה הורדה מקישור ── */
+.urlrow { display: flex; gap: 8px; margin-top: 14px; }
+.urlin {
+  flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 10px 16px; font-family: inherit; font-size: 13px; direction: rtl;
+}
+.urlin:focus { outline: none; border-color: var(--accent); }
+.urlin::placeholder { color: var(--muted); }
+.urlbtn {
+  flex: none; background: var(--c2); color: #fff; border: none; border-radius: 999px;
+  padding: 10px 18px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.urlbtn:hover { filter: brightness(1.05); }
+.urlhint { font-size: 11px; color: var(--muted); margin-top: 7px; text-align: center; }
+
 /* ── מסך 2: עיבוד ── */
 .filechip {
   display: inline-flex; align-items: center; gap: 9px;

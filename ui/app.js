@@ -37,6 +37,31 @@ async function pickAndStart() {
 $("pickBtn").addEventListener("click", (e) => { e.stopPropagation(); pickAndStart(); });
 $("drop").addEventListener("click", pickAndStart);
 
+// ── הורדה מקישור ──
+function startDownload() {
+  const url = $("urlIn").value.trim();
+  if (!url) return;
+  show("proc");
+  $("procName").textContent = "הורדה מקישור";
+  $("stageHeading").textContent = "מוריד את ההרצאה…";
+  $("fill").style.width = "0"; $("pct").textContent = "0%"; $("eta").textContent = "";
+  $("queue").innerHTML = "";
+  resetSteps();
+  window.pywebview.api.download(url);
+  $("urlIn").value = "";
+}
+$("urlBtn").addEventListener("click", startDownload);
+$("urlIn").addEventListener("keydown", (e) => { if (e.key === "Enter") startDownload(); });
+
+window.onDownload = function (p) {
+  $("bar2").classList.remove("loading");
+  $("stageHeading").textContent = "מוריד את ההרצאה…";
+  const pct = p.percent || 0;
+  $("fill").style.width = pct + "%";
+  $("pct").textContent = pct + "%";
+  $("eta").textContent = p.status === "finished" ? "ההורדה הושלמה — מתחיל תמלול…" : "מוריד מהאינטרנט…";
+};
+
 // ── גרירה (הטיפול בקובץ ב-Python; כאן ויזואל בלבד) ──
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());

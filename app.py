@@ -45,6 +45,26 @@ class Api:
         except Exception as e:  # noqa: BLE001
             self._js("window.onError", str(e))
 
+    # שמירת כתוביות אחרי עריכה
+    def save_srt(self, video, cues):
+        try:
+            engine.save_srt(video, cues)
+            return True
+        except Exception as e:  # noqa: BLE001
+            return str(e)
+
+    # ייצוא תמליל (txt / docx) — נשמר ליד הסרטון ונפתח
+    def export(self, video, cues, fmt):
+        try:
+            out = engine.export_docx(video, cues) if fmt == "docx" else engine.export_txt(video, cues)
+            try:
+                os.startfile(out)  # noqa: SLF001
+            except Exception:
+                pass
+            return os.path.basename(out)
+        except Exception as e:  # noqa: BLE001
+            return "ERR: " + str(e)
+
     def _js(self, fn, arg):
         try:
             self.window.evaluate_js(f"{fn}({json.dumps(arg, ensure_ascii=True)})")

@@ -272,3 +272,36 @@ body {
 .screen:fullscreen { height: 100%; width: 100%; border-radius: 0; }
 .screen:fullscreen .subline { font-size: 26px; margin-bottom: 7%; max-width: 80%; }
 .screen:-webkit-full-screen { height: 100%; width: 100%; }
+
+/* ── פאנל תמליל (עריכה · חיפוש · ייצוא) ── */
+.transcript { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.tc-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.tc-search {
+  flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 8px 14px; font-family: inherit; font-size: 13px; direction: rtl;
+}
+.tc-search:focus { outline: none; border-color: var(--accent); }
+.tc-act {
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 9px; padding: 7px 11px; font-family: inherit; font-size: 12px;
+  font-weight: 600; cursor: pointer; flex: none;
+}
+.tc-act:hover { border-color: var(--accent); color: var(--accent); }
+.tc-list { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.tc-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 5px 8px; border-radius: 9px;
+}
+.tc-row.cur { background: rgba(197, 106, 67, 0.12); }
+.tc-time {
+  flex: none; background: none; border: none; color: var(--accent);
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 2px 0; min-width: 44px; text-align: left;
+}
+.tc-time:hover { text-decoration: underline; }
+.tc-text {
+  flex: 1; font-size: 13.5px; line-height: 1.5; color: var(--text);
+  outline: none; border-radius: 5px; padding: 2px 4px;
+}
+.tc-text:focus { background: var(--panel); box-shadow: 0 0 0 1px var(--accent); }
+.tc-status { margin-top: 8px; font-size: 12px; color: var(--c2); min-height: 16px; }

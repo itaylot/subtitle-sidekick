@@ -18,6 +18,10 @@ if not exist "%VENV%\Scripts\pythonw.exe" (
   )
   "%VENV%\Scripts\python.exe" -m pip install --upgrade pip
   "%VENV%\Scripts\python.exe" -m pip install -r requirements.txt
+  REM create a Desktop shortcut so launching is one double-click, no CMD
+  "%VENV%\Scripts\python.exe" tools\make_shortcut.py
+  echo.
+  echo Done! A "Hebrew Subtitles" icon was added to your Desktop.
 )
 
 start "" "%~dp0%VENV%\Scripts\pythonw.exe" "%~dp0app.py"

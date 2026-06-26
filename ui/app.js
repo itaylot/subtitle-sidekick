@@ -171,15 +171,71 @@ window.onError = function (msg) {
 const video = $("video");
 const screenEl = document.querySelector(".screen");
 let cues = [];
+let currentVideo = null;
+let rowEls = [];
+let curRow = -1;
 
 function watchItem(i) {
   const it = queue[i];
   if (!it || !it.res) return;
   cues = it.res.cues || [];
-  video.src = "file:///" + it.res.video.replace(/\\/g, "/");
+  currentVideo = it.res.video;
+  video.src = "file:///" + currentVideo.replace(/\\/g, "/");
   show("play");
   video.load();
+  renderTranscript();
 }
+
+// ── פאנל תמליל: עריכה + קפיצה ──
+function renderTranscript() {
+  const list = $("tcList");
+  list.innerHTML = "";
+  rowEls = [];
+  curRow = -1;
+  cues.forEach((c, idx) => {
+    const row = document.createElement("div");
+    row.className = "tc-row";
+    const t = document.createElement("button");
+    t.className = "tc-time";
+    t.textContent = clock(c.start);
+    t.onclick = () => { video.currentTime = c.start; video.play(); };
+    const txt = document.createElement("div");
+    txt.className = "tc-text";
+    txt.contentEditable = "true";
+    txt.spellcheck = false;
+    txt.textContent = c.text;
+    txt.addEventListener("input", () => { cues[idx].text = txt.textContent; });
+    row.appendChild(t);
+    row.appendChild(txt);
+    list.appendChild(row);
+    rowEls.push(row);
+  });
+  $("tcStatus").textContent = "";
+}
+
+// חיפוש
+$("tcSearch").addEventListener("input", (e) => {
+  const q = e.target.value.trim();
+  rowEls.forEach((row, idx) => {
+    row.hidden = q && !cues[idx].text.includes(q);
+  });
+});
+
+// שמירת עריכות
+$("saveBtn").addEventListener("click", async () => {
+  $("tcStatus").textContent = "שומר…";
+  const r = await window.pywebview.api.save_srt(currentVideo, cues);
+  $("tcStatus").textContent = r === true ? "✓ הכתוביות נשמרו" : "שגיאה: " + r;
+});
+
+// ייצוא
+async function doExport(fmt) {
+  $("tcStatus").textContent = "מייצא…";
+  const r = await window.pywebview.api.export(currentVideo, cues, fmt);
+  $("tcStatus").textContent = r && r.startsWith("ERR") ? "שגיאה בייצוא" : "✓ נוצר: " + r;
+}
+$("txtBtn").addEventListener("click", () => doExport("txt"));
+$("docxBtn").addEventListener("click", () => doExport("docx"));
 
 $("playBtn").addEventListener("click", () => { video.paused ? video.play() : video.pause(); });
 video.addEventListener("play", () => ($("playBtn").textContent = "⏸"));
@@ -187,10 +243,21 @@ video.addEventListener("pause", () => ($("playBtn").textContent = "▶"));
 
 video.addEventListener("timeupdate", () => {
   const t = video.currentTime, d = video.duration || 0;
-  const cue = cues.find((c) => t >= c.start && t <= c.end);
-  $("subline").textContent = cue ? cue.text : "";
+  const idx = cues.findIndex((c) => t >= c.start && t <= c.end);
+  $("subline").textContent = idx >= 0 ? cues[idx].text : "";
   $("pfill").style.width = (d ? (t / d) * 100 : 0) + "%";
   $("tc").textContent = clock(t) + " / " + clock(d);
+  if (idx !== curRow) {
+    if (rowEls[curRow]) rowEls[curRow].classList.remove("cur");
+    if (rowEls[idx]) {
+      rowEls[idx].classList.add("cur");
+      // גלילה רק אם לא עורכים כרגע
+      if (!(document.activeElement && document.activeElement.classList.contains("tc-text"))) {
+        rowEls[idx].scrollIntoView({ block: "nearest" });
+      }
+    }
+    curRow = idx;
+  }
 });
 
 $("track").addEventListener("click", (e) => {

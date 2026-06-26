@@ -1,7 +1,6 @@
-"""engine.py — לוגיקת התמלול, מנותקת לחלוטין מה-UI.
+"""engine.py — לוגיקת התמלול + שמירה/ייצוא, מנותקת לחלוטין מה-UI.
 
-faster-whisper + מודל ivrit-ai. ה-UI (app.py / pywebview) קורא ל-transcribe()
-ומקבל התקדמות דרך callback.
+faster-whisper + מודל ivrit-ai. זיהוי GPU אוטומטי (NVIDIA → פי כמה מהר).
 """
 
 import os
@@ -12,15 +11,14 @@ MODEL_ACCURATE = "ivrit-ai/whisper-large-v3-turbo-ct2"  # מדויק לעברי�
 MODEL_FAST = "small"                                    # מהיר, פחות מדויק
 VIDEO_EXT = (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".mp3", ".m4a", ".wav", ".flac", ".ogg")
 
-# כמה threads ל-CPU — ככל שיש יותר ליבות, התמלול מהיר יותר.
 CPU_THREADS = max(4, os.cpu_count() or 4)
 
 _model = None
 _model_name = None
+_device = "cpu"
 
 
 def fmt_time(t: float) -> str:
-    """שניות -> HH:MM:SS,mmm (פורמט SRT)."""
     h = int(t // 3600); m = int((t % 3600) // 60); s = int(t % 60)
     ms = int(round((t - int(t)) * 1000))
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
@@ -37,8 +35,77 @@ def human(sec: float) -> str:
     return f"{s} שניות"
 
 
-# נגן עצמאי (בונוס, ליד הסרטון). כתוביות native דרך <track> VTT —
-# מופיעות גם במסך מלא (בניגוד ל-overlay div שנעלם ב-fullscreen).
+# ── זיהוי חומרה ──
+def _resolve_device():
+    """מחזיר (device, compute_type). אם יש GPU של NVIDIA — משתמשים בו."""
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda", "float16"
+    except Exception:
+        pass
+    return "cpu", "int8"
+
+
+def _load_model(name):
+    """טוען מודל; מנסה GPU ואם נכשל נופל ל-CPU."""
+    from faster_whisper import WhisperModel
+    dev, ct = _resolve_device()
+    try:
+        m = WhisperModel(name, device=dev, compute_type=ct, cpu_threads=CPU_THREADS)
+        return m, dev
+    except Exception:
+        m = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=CPU_THREADS)
+        return m, "cpu"
+
+
+# ── SRT ──
+def write_srt(srt_path, cues):
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for i, c in enumerate(cues, 1):
+            f.write(f"{i}\n{fmt_time(c['start'])} --> {fmt_time(c['end'])}\n{c['text'].strip()}\n\n")
+
+
+def save_srt(video, cues):
+    """שומר מחדש SRT + נגן אחרי עריכה."""
+    srt = os.path.splitext(video)[0] + ".srt"
+    write_srt(srt, cues)
+    make_viewer(video, cues)
+    return srt
+
+
+# ── ייצוא תמליל ──
+def export_txt(video, cues):
+    out = os.path.splitext(video)[0] + " — תמליל.txt"
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("\n".join(c["text"].strip() for c in cues))
+    return out
+
+
+def export_docx(video, cues):
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+
+    def set_rtl(p):
+        pPr = p._p.get_or_add_pPr()
+        bidi = OxmlElement("w:bidi")
+        pPr.append(bidi)
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    doc = Document()
+    title = doc.add_heading(os.path.splitext(os.path.basename(video))[0], level=1)
+    set_rtl(title)
+    for c in cues:
+        p = doc.add_paragraph(c["text"].strip())
+        set_rtl(p)
+    out = os.path.splitext(video)[0] + " — תמליל.docx"
+    doc.save(out)
+    return out
+
+
+# נגן עצמאי (בונוס). כתוביות native דרך <track> VTT — מופיעות גם במסך מלא.
 VIEWER_TEMPLATE = """<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8"><title>__TITLE__</title>
 <style>
@@ -77,23 +144,18 @@ def make_viewer(video, cues):
 
 
 def transcribe(video_path, fast=False, on_progress=None):
-    """מתמלל קובץ → SRT + cues. on_progress(dict) נקרא לאורך הדרך.
-
-    שלבים: 'extract' (טעינת מודל/הכנה) → 'transcribe' → 'sync'.
-    מהירות: beam_size=1 (greedy) + כל ליבות ה-CPU. vad_filter מדלג על שקט.
-    """
-    global _model, _model_name
+    """מתמלל קובץ → SRT + cues. on_progress(dict) נקרא לאורך הדרך."""
+    global _model, _model_name, _device
 
     def emit(**kw):
         if on_progress:
+            kw.setdefault("device", _device)
             on_progress(kw)
 
-    from faster_whisper import WhisperModel
     name = MODEL_FAST if fast else MODEL_ACCURATE
-
     if _model is None or _model_name != name:
         emit(stage="extract", percent=0, eta=None, elapsed=0, loading=True)
-        _model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=CPU_THREADS)
+        _model, _device = _load_model(name)
         _model_name = name
     emit(stage="extract", percent=100, eta=None, elapsed=0)
 

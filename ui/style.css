@@ -50,6 +50,7 @@ body.dark {
 * { box-sizing: border-box; }
 
 html, body { height: 100%; }
+html { overflow: hidden; }  /* הגלילה קורית בתוך הכרטיס (.body), לא על כל החלון */
 body {
   margin: 0;
   direction: rtl;
@@ -65,11 +66,15 @@ body {
   padding: 30px;
   user-select: none;
 }
+@media (max-height: 700px) { body { padding: 14px; } }
 
-/* ── חלון האפליקציה (כרטיס) ── */
+/* ── חלון האפליקציה (כרטיס) — מוגבל לגובה המסך, התוכן הפנימי גולל אם צריך ── */
 .win {
   width: 100%;
   max-width: 600px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -87,33 +92,99 @@ body {
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
+.menubtn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text); font-size: 18px; padding: 2px 4px; line-height: 1; flex: none;
+}
+.menubtn:hover { color: var(--accent); }
+.homebtn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text); font-size: 15px; padding: 2px 4px; line-height: 1; flex: none;
+}
+.homebtn:hover { color: var(--accent); }
 .appic {
   width: 26px; height: 26px;
   border-radius: 9px;
-  background: var(--accent);
-  color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 700; flex: none;
+  object-fit: cover; flex: none;
 }
 .appname { font-size: 13.5px; font-weight: 600; }
+.jobpill {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--accent); color: #fff; border: none;
+  border-radius: 999px; padding: 5px 11px; margin-right: 8px;
+  font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.jobpill[hidden] { display: none; }
+.jobpill:hover { filter: brightness(1.05); }
 .barsp { flex: 1; }
 .themebtn {
   background: none; border: none; cursor: pointer;
   color: var(--muted); font-size: 15px; padding: 4px; line-height: 1;
 }
-.barx { display: flex; gap: 6px; }
-.barx span { width: 9px; height: 9px; border-radius: 50%; }
-.d1 { background: var(--accent); }
-.d2 { background: var(--c2); }
-.d3 { background: var(--c3); }
+.barx { display: flex; gap: 7px; }
+.barx span { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; }
+.barx span:hover { filter: brightness(1.1); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06); }
+.d1 { background: #e0533f; }  /* סגירה */
+.d2 { background: #d9a441; }  /* מזעור */
+.d3 { background: #5f9e7a; }  /* מסך מלא */
+
+/* ── סרגל הכותרת לא נגלל; הגוף גולל בתוך הכרטיס אם התוכן גבוה מהחלון ── */
+.bar { flex: none; }
 
 /* ── גוף ── */
-.body { padding: 28px 26px; }
+.body {
+  padding: 28px 26px;
+  flex: 1;
+  overflow-y: auto;
+}
+.body::-webkit-scrollbar { width: 8px; }
+.body::-webkit-scrollbar-track { background: transparent; }
+.body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .kicker {
   font-size: 11px; font-weight: 600; letter-spacing: 0.07em;
   color: var(--accent); margin-bottom: 16px;
 }
 .view[hidden] { display: none; }
+
+/* ── מסך הבית ── */
+.stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-bottom: 18px;
+}
+.stat-box {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 14px 16px; text-align: center;
+}
+.stat-num { font-family: "Frank Ruhl Libre", serif; font-size: 26px; font-weight: 700; color: var(--accent); }
+.stat-lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+.tipcard {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 14px 16px; margin-bottom: 18px;
+}
+.tip-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.tip-label { font-size: 12px; font-weight: 600; color: var(--c2); }
+.tip-next {
+  background: none; border: none; cursor: pointer; color: var(--muted); font-size: 15px; line-height: 1;
+}
+.tip-next:hover { color: var(--accent); }
+.tip-text { font-size: 13.5px; line-height: 1.5; }
+
+.home-actions { display: flex; flex-direction: column; gap: 10px; }
+.homeaction {
+  display: flex; align-items: center; gap: 11px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 13px 16px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--text);
+  cursor: pointer; text-align: right;
+}
+.homeaction:hover { border-color: var(--accent); }
+.homeaction[hidden] { display: none; }
+.ha-ic {
+  width: 30px; height: 30px; border-radius: 9px; flex: none;
+  background: var(--panel); display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--accent);
+}
 
 /* ── מסך 1: גרירה ── */
 .drop2 {
@@ -167,6 +238,132 @@ body {
 }
 .sw.on .knob { right: 17px; }
 .priv { font-size: 12px; color: var(--c2); }
+.settingsLink {
+  background: none; border: none; color: var(--muted); font-size: 12px;
+  font-family: inherit; cursor: pointer; padding: 0;
+}
+.settingsLink:hover { color: var(--text); }
+
+/* ── בורר מצב תמלול ── */
+.moderow { display: flex; align-items: center; gap: 9px; margin-top: 22px; }
+.modelbl { font-size: 13px; color: var(--muted); flex: none; }
+
+/* ── מגירת הגדרות שרת Cloud ── */
+.settings-hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 16px; }
+.settings-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.settings-lbl { font-size: 12.5px; color: var(--muted); }
+.settings-status { font-size: 12px; color: var(--c2); margin-top: 10px; min-height: 16px; }
+.settings-cost {
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.cost-line { font-size: 14px; }
+.cost-line strong { color: var(--c2); }
+.cost-sub { font-size: 12px; color: var(--muted); }
+.cost-reset {
+  align-self: flex-start; margin-top: 6px; background: none; border: 1px solid var(--line);
+  color: var(--muted); border-radius: 999px; padding: 5px 12px; font-family: inherit;
+  font-size: 12px; cursor: pointer;
+}
+.cost-reset:hover { color: var(--text); border-color: var(--muted); }
+
+/* ── בורר קורס במסך הפתיחה ── */
+.courserow { display: flex; align-items: center; gap: 9px; margin-top: 16px; }
+.courselbl { font-size: 13px; color: var(--muted); flex: none; }
+.coursesel {
+  flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 9px 14px; font-family: inherit; font-size: 13px;
+  direction: rtl; cursor: pointer;
+}
+.coursesel:focus { outline: none; border-color: var(--accent); }
+
+/* ── תפריט צד: הקורסים שלי ── */
+.drawer-ov {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(40, 25, 12, 0.38);
+}
+.drawer-ov[hidden] { display: none; }
+.drawer {
+  position: fixed; top: 0; right: 0; z-index: 41;
+  width: 300px; max-width: 86vw; height: 100%;
+  background: var(--card); border-left: 1px solid var(--line);
+  box-shadow: -14px 0 40px rgba(90, 55, 25, 0.22);
+  display: flex; flex-direction: column;
+  padding: 18px 18px 22px;
+}
+.drawer[hidden] { display: none; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.drawer-title { font-family: "Frank Ruhl Libre", serif; font-size: 19px; font-weight: 700; }
+.drawer-x {
+  background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 4px;
+}
+.drawer-x:hover { color: var(--text); }
+.newcourse { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.newcourse-in {
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 9px 14px; font-family: inherit; font-size: 13px; direction: rtl;
+}
+.newcourse-in:focus { outline: none; border-color: var(--accent); }
+.newcourse-btn {
+  background: var(--accent); color: #fff; border: none; border-radius: 999px;
+  padding: 10px 16px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.newcourse-btn:hover { filter: brightness(1.05); }
+.courses { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.course { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.course-head {
+  display: flex; align-items: center; gap: 8px; padding: 10px 13px;
+  cursor: pointer; font-size: 13.5px; font-weight: 600;
+}
+.course-head:hover { background: rgba(197, 106, 67, 0.07); }
+.course-arrow { flex: none; font-size: 10px; color: var(--muted); transition: transform 0.15s; }
+.course.open .course-arrow { transform: rotate(90deg); }
+.course-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.course-count { flex: none; font-size: 11px; color: var(--muted); }
+.course-del {
+  flex: none; background: none; border: none; color: var(--muted);
+  font-size: 13px; cursor: pointer; padding: 0 2px; opacity: 0; transition: opacity 0.15s;
+}
+.course-head:hover .course-del { opacity: 1; }
+.course-del:hover { color: #c0533e; }
+.lectures { display: none; flex-direction: column; padding: 0 8px 8px; gap: 3px; }
+.course.open .lectures { display: flex; }
+.lec {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px; border-radius: 9px; cursor: pointer; font-size: 12.5px;
+}
+.lec:hover { background: var(--card); }
+.lec-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.courses-empty { font-size: 12.5px; color: var(--muted); text-align: center; padding: 24px 8px; }
+
+/* ── כפתור "⋯" (קביעב) — בשורת הרצאה ובמסך הנגן ── */
+.kebab {
+  flex: none; width: 28px; height: 28px; padding: 0;
+  background: none; border: none; color: var(--muted);
+  font-size: 17px; line-height: 1; cursor: pointer; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+}
+.kebab:hover { background: var(--panel); color: var(--text); }
+
+/* ── תפריט פעולות צף (שינוי שם / קורס / דפדפן / הסרה) ── */
+.actionmenu {
+  position: fixed; z-index: 60; min-width: 168px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--win-shadow); padding: 6px; display: flex; flex-direction: column; gap: 2px;
+}
+.am-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: none; color: var(--text); text-align: right;
+  font-family: inherit; font-size: 13px; padding: 8px 9px; border-radius: 8px; cursor: pointer;
+}
+.am-item:hover { background: var(--panel); }
+.am-item.am-danger:hover { background: rgba(192, 83, 62, 0.12); color: #c0533e; }
+.am-move { cursor: default; }
+.am-move:hover { background: none; }
+.am-move select {
+  flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 7px; padding: 5px 8px; font-family: inherit; font-size: 12.5px; direction: rtl;
+}
 
 /* ── שדה הורדה מקישור ── */
 .urlrow { display: flex; gap: 8px; margin-top: 14px; }
@@ -219,6 +416,26 @@ body {
 .step.done { color: var(--c2); border-color: var(--c2); }
 .step.now { color: #fff; background: var(--accent); border-color: transparent; font-weight: 600; }
 
+/* ── כפתור "הפעל כתוביות" בסיום ── */
+.watchdone {
+  margin-top: 22px; width: 100%;
+  background: var(--accent); color: #fff; border: none;
+  border-radius: 999px; padding: 13px 22px;
+  font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 5px 16px rgba(197, 106, 67, 0.32);
+}
+.watchdone[hidden] { display: none; }
+.watchdone:hover { filter: brightness(1.05); }
+
+/* ── כפתור "הרצאה חדשה" ── */
+.newlec {
+  margin-top: 14px; width: 100%;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 999px; padding: 11px 22px;
+  font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.newlec:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ── תור תמלולים ── */
 .queue { margin-top: 20px; display: flex; flex-direction: column; gap: 7px; }
 .queue:empty { display: none; }
@@ -242,7 +459,6 @@ body {
 .screen {
   position: relative; background: var(--screen);
   border-radius: 16px; height: 260px; overflow: hidden;
-  display: flex; align-items: flex-end; justify-content: center;
 }
 .screen video {
   position: absolute; inset: 0; width: 100%; height: 100%;
@@ -254,39 +470,71 @@ body {
   letter-spacing: 0.05em; padding: 3px 8px; border-radius: 6px;
 }
 .subline {
-  position: relative; z-index: 2; margin-bottom: 18px;
+  position: absolute; z-index: 2; bottom: 62px; left: 50%; transform: translateX(-50%);
   background: #fff8ec; color: #3a322b;
   font-size: 14.5px; font-weight: 500; line-height: 1.5;
   padding: 7px 16px; border-radius: 10px; max-width: 84%;
   text-align: center; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 .subline:empty { display: none; }
-.ctrls { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+
+/* פקדי ניגון — חלק מ-.screen כדי שיישארו גלויים גם במסך מלא */
+.ctrls {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  padding: 16px 14px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
+}
 .play {
-  width: 42px; height: 42px; border-radius: 50%;
+  width: 38px; height: 38px; border-radius: 50%;
   background: var(--accent); color: #fff; border: none;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; cursor: pointer; flex: none;
+  font-size: 13px; cursor: pointer; flex: none;
   box-shadow: 0 5px 16px rgba(197, 106, 67, 0.32);
 }
-.track { flex: 1; height: 8px; border-radius: 5px; background: var(--panel); position: relative; overflow: hidden; cursor: pointer; }
+.track { flex: 1; height: 7px; border-radius: 5px; background: rgba(255, 255, 255, 0.28); position: relative; overflow: hidden; cursor: pointer; }
 .pfill { position: absolute; top: 0; right: 0; height: 100%; width: 0; background: var(--accent); border-radius: 5px; }
-.tc { font-size: 12px; color: var(--muted); flex: none; }
-.fsbtn {
-  flex: none; background: var(--panel); border: 1px solid var(--line);
-  color: var(--text); border-radius: 9px; width: 34px; height: 34px;
-  font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+.tc {
+  font-size: 11.5px; color: #fff; flex: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
-.backbtn {
-  margin-top: 14px; background: none; border: none; color: var(--muted);
-  font-family: inherit; font-size: 13px; cursor: pointer; padding: 0;
+.ovlbtn {
+  flex: none; background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff; border-radius: 8px; height: 30px; padding: 0 9px;
+  font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
 }
-.backbtn:hover { color: var(--text); }
+.ovlbtn:hover { background: rgba(255, 255, 255, 0.26); }
+.speedsel {
+  font-family: inherit; cursor: pointer; direction: ltr; text-align: center;
+  -webkit-appearance: none; appearance: none;
+}
+.speedsel:hover { background: rgba(255, 255, 255, 0.26); }
+.speedsel option { color: #2a221b; }
 
-/* ── מסך מלא: ה-overlay נשאר חלק מהמכל ולכן הכתוביות מופיעות ── */
+.screen:fullscreen .subline { font-size: 26px; bottom: 96px; max-width: 80%; }
+.screen:fullscreen .ctrls { padding: 22px 26px 20px; gap: 12px; }
+.screen:fullscreen .play { width: 50px; height: 50px; font-size: 17px; }
+.screen:fullscreen .ovlbtn { height: 38px; font-size: 14px; padding: 0 13px; }
+.screen:fullscreen .tc { font-size: 14px; }
+.play-head { display: flex; align-items: center; gap: 6px; margin: 6px 0 22px; }
+.play-title {
+  flex: 1; font-family: "Frank Ruhl Libre", serif; font-size: 19px; font-weight: 700;
+  text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── מסך מלא: ה-overlay נשאר חלק מהמכל ולכן הכתוביות והפקדים מופיעים ── */
 .screen:fullscreen { height: 100%; width: 100%; border-radius: 0; }
-.screen:fullscreen .subline { font-size: 26px; margin-bottom: 7%; max-width: 80%; }
 .screen:-webkit-full-screen { height: 100%; width: 100%; }
+
+/* כפתור יציאה ממסך מלא — גלוי רק בתוך מסך מלא, ESC לא תמיד מוכר/נוח */
+.exitfs {
+  position: absolute; top: 12px; left: 12px; z-index: 3;
+  background: rgba(20, 14, 8, 0.55); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px; padding: 7px 14px; font-family: inherit; font-size: 12.5px;
+  font-weight: 600; cursor: pointer;
+}
+.exitfs[hidden] { display: none; }
+.exitfs:hover { background: rgba(20, 14, 8, 0.75); }
 
 /* ── פאנל תמליל (עריכה · חיפוש · ייצוא) ── */
 .transcript { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }

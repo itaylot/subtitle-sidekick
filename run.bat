@@ -20,6 +20,8 @@ if not exist "%VENV%\Scripts\pythonw.exe" (
   "%VENV%\Scripts\python.exe" -m pip install -r requirements.txt
   REM create a Desktop shortcut so launching is one double-click, no CMD
   "%VENV%\Scripts\python.exe" tools\make_shortcut.py
+  REM register subsidekick:// so a Chrome bookmark can launch the app too
+  "%VENV%\Scripts\python.exe" tools\register_protocol.py
   echo.
   echo Done! A "Subtitle Sidekick" icon was added to your Desktop.
 )

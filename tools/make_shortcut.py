@@ -9,6 +9,7 @@ import subprocess
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PYW = os.path.join(ROOT, ".venv", "Scripts", "pythonw.exe")
 APP = os.path.join(ROOT, "app.py")
+ICON = os.path.join(ROOT, "ui", "icons", "app.ico")
 
 PS = (
     "$d=[Environment]::GetFolderPath('Desktop');"
@@ -17,7 +18,7 @@ PS = (
     f"$l.TargetPath='{PYW}';"
     f"$l.Arguments='\"{APP}\"';"
     f"$l.WorkingDirectory='{ROOT}';"
-    f"$l.IconLocation='{PYW},0';"
+    f"$l.IconLocation='{ICON},0';"
     "$l.Save()"
 )
 

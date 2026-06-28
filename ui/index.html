@@ -10,16 +10,53 @@
   <div class="win">
     <!-- סרגל כותרת -->
     <div class="bar">
-      <div class="appic">S</div>
+      <button class="menubtn" id="menuBtn" title="הקורסים שלי">☰</button>
+      <button class="homebtn" id="homeBtn" title="מסך הבית">🏠</button>
+      <img class="appic" src="icons/app.png" alt="" />
       <div class="appname">Subtitle Sidekick</div>
+      <button class="jobpill" id="jobPill" hidden>⏳ <span id="jobPct">0%</span></button>
       <div class="barsp"></div>
       <button class="themebtn" id="themeBtn" title="מצב בהיר/כהה">◐</button>
-      <div class="barx"><span class="d1"></span><span class="d2"></span><span class="d3"></span></div>
+      <div class="barx">
+        <span class="d1" id="winClose" title="סגירה"></span>
+        <span class="d2" id="winMin" title="מזעור"></span>
+        <span class="d3" id="winFull" title="מסך מלא"></span>
+      </div>
     </div>
 
     <div class="body">
+      <!-- ── מסך הבית: סטטיסטיקה + טיפ + פעולות מהירות ── -->
+      <section class="view" id="view-home">
+        <div class="kicker">ברוכים הבאים</div>
+
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="tipcard" id="tipCard">
+          <div class="tip-head">
+            <span class="tip-label">💡 טיפ ללמידה</span>
+            <button class="tip-next" id="tipNext" title="טיפ נוסף">↻</button>
+          </div>
+          <div class="tip-text" id="tipText"></div>
+        </div>
+
+        <div class="home-actions">
+          <button class="homeaction" id="homeNewLec">
+            <span class="ha-ic">＋</span><span>הרצאה חדשה</span>
+          </button>
+          <button class="homeaction" id="homeCourses">
+            <span class="ha-ic">☰</span><span>הקורסים שלי</span>
+          </button>
+          <button class="homeaction" id="homeContinue" hidden>
+            <span class="ha-ic">▶</span><span id="homeContinueLabel">המשך לצפות</span>
+          </button>
+          <button class="homeaction" id="homeSettings">
+            <span class="ha-ic">⚙</span><span>הגדרות שרת</span>
+          </button>
+        </div>
+      </section>
+
       <!-- ── מסך 1: פתיחה / גרירה ── -->
-      <section class="view" id="view-open">
+      <section class="view" id="view-open" hidden>
         <div class="kicker">בחירת קובץ</div>
         <div class="drop2" id="drop">
           <div class="dtile">↑</div>
@@ -35,11 +72,22 @@
         </div>
         <div class="urlhint">ל-Moodle: התחברו קודם בכרום, ואז הדביקו את הקישור.</div>
 
+        <div class="courserow">
+          <span class="courselbl">קורס:</span>
+          <select class="coursesel" id="courseSel"><option value="">ללא קורס</option></select>
+        </div>
+
+        <div class="moderow">
+          <span class="modelbl">מצב תמלול:</span>
+          <select class="coursesel" id="modeSel">
+            <option value="local_accurate">מקומי — מדויק (פרטי, ברירת מחדל)</option>
+            <option value="local_fast">מקומי — מהיר (פחות מדויק)</option>
+            <option value="cloud">☁ שרת GPU (ענן) — מהיר מאוד</option>
+          </select>
+        </div>
         <div class="footrow">
-          <div class="fast" id="fastToggle">
-            <span class="sw" id="fastSw"><span class="knob"></span></span>מצב מהיר
-          </div>
-          <div class="priv">🔒 הכול נשאר אצלכם במחשב</div>
+          <div class="priv" id="privNote">🔒 הכול נשאר אצלכם במחשב</div>
+          <button class="settingsLink" id="cloudSettingsBtn">⚙ הגדרות שרת</button>
         </div>
       </section>
 
@@ -58,24 +106,41 @@
           <div class="step" id="step-transcribe">תמלול</div>
           <div class="step" id="step-sync">סנכרון</div>
         </div>
+        <button class="watchdone" id="watchDone" hidden>▶ הפעל את הכתוביות</button>
         <div class="queue" id="queue"></div>
+        <button class="newlec" id="newLec">＋ הרצאה חדשה</button>
       </section>
 
       <!-- ── מסך 3: נגן ── -->
       <section class="view" id="view-play" hidden>
-        <div class="kicker">צפייה</div>
+        <div class="play-head">
+          <button class="kebab" id="backBtn" title="חזרה">→</button>
+          <span class="play-title" id="playTitle"></span>
+          <button class="kebab" id="playKebab" title="פעולות">⋯</button>
+        </div>
         <div class="screen">
           <video id="video" preload="metadata"></video>
           <div class="cc">CC עברית</div>
+          <button class="exitfs" id="exitFs" title="יציאה ממסך מלא" hidden>✕ יציאה ממסך מלא</button>
           <div class="subline" id="subline"></div>
+          <div class="ctrls">
+            <button class="play" id="playBtn">▶</button>
+            <button class="ovlbtn" id="skipBack" title="10 שניות אחורה">10⟲</button>
+            <button class="ovlbtn" id="skipFwd" title="10 שניות קדימה">⟳10</button>
+            <div class="track" id="track"><div class="pfill" id="pfill"></div></div>
+            <span class="tc" id="tc">0:00 / 0:00</span>
+            <select class="ovlbtn speedsel" id="speedSel" title="מהירות ניגון">
+              <option value="0.5">0.5x</option>
+              <option value="0.75">0.75x</option>
+              <option value="1" selected>1x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="1.75">1.75x</option>
+              <option value="2">2x</option>
+            </select>
+            <button class="ovlbtn" id="fsBtn" title="מסך מלא">⛶</button>
+          </div>
         </div>
-        <div class="ctrls">
-          <button class="play" id="playBtn">▶</button>
-          <div class="track" id="track"><div class="pfill" id="pfill"></div></div>
-          <span class="tc" id="tc">0:00 / 0:00</span>
-          <button class="fsbtn" id="fsBtn" title="מסך מלא">⛶</button>
-        </div>
-        <button class="backbtn" id="backBtn">→ חזרה לרשימה</button>
 
         <!-- פאנל תמליל: חיפוש · עריכה · ייצוא -->
         <div class="transcript" id="transcript">
@@ -91,6 +156,53 @@
       </section>
     </div>
   </div>
+
+  <!-- ── תפריט צד: הקורסים שלי ── -->
+  <div class="drawer-ov" id="drawerOv" hidden></div>
+  <aside class="drawer" id="drawer" hidden>
+    <div class="drawer-head">
+      <span class="drawer-title">הקורסים שלי</span>
+      <button class="drawer-x" id="drawerClose" title="סגירה">✕</button>
+    </div>
+    <div class="newcourse" id="newCourseRow">
+      <input class="newcourse-in" id="newCourseIn" placeholder="שם קורס חדש…" hidden />
+      <button class="newcourse-btn" id="newCourseBtn">+ קורס חדש</button>
+    </div>
+    <div class="courses" id="coursesList"></div>
+  </aside>
+
+  <!-- ── תפריט צד: הגדרות שרת Cloud (אישי, לא משותף) ── -->
+  <div class="drawer-ov" id="settingsOv" hidden></div>
+  <aside class="drawer" id="settingsDrawer" hidden>
+    <div class="drawer-head">
+      <span class="drawer-title">הגדרות שרת מהיר</span>
+      <button class="drawer-x" id="settingsClose" title="סגירה">✕</button>
+    </div>
+    <div class="settings-hint">
+      כל משתמש מגדיר כאן שרת GPU משלו (לדוגמה חשבון RunPod אישי).
+      אין שרת משותף — הפרטים נשמרים רק במחשב הזה. ראו README להקמת שרת.
+    </div>
+    <div class="settings-field">
+      <label class="settings-lbl" for="settingsEndpoint">כתובת השרת (Endpoint URL)</label>
+      <input class="newcourse-in" id="settingsEndpoint" placeholder="https://example-runpod-id.proxy.runpod.net" />
+    </div>
+    <div class="settings-field">
+      <label class="settings-lbl" for="settingsKey">מפתח API</label>
+      <input class="newcourse-in" id="settingsKey" type="password" placeholder="••••••••" />
+    </div>
+    <div class="settings-field">
+      <label class="settings-lbl" for="settingsPrice">מחיר ה-GPU לשעה (דולר) — לחישוב עלות</label>
+      <input class="newcourse-in" id="settingsPrice" type="number" step="0.01" min="0" placeholder="0.39" />
+    </div>
+    <button class="newcourse-btn" id="settingsSaveBtn">שמירה</button>
+    <div class="settings-status" id="settingsStatus"></div>
+
+    <div class="settings-cost" id="settingsCost">
+      <div class="cost-line">עלות מצטברת: <strong id="costTotal">$0.00</strong></div>
+      <div class="cost-sub" id="costSub"></div>
+      <button class="cost-reset" id="costReset">איפוס מונה</button>
+    </div>
+  </aside>
 
   <script src="app.js"></script>
 </body>

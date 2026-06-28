@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Node (לא בשימוש — ליתר ביטחון)
+node_modules/
+package*.json
+
+# מדיה ופלט — לא נכנסים לגיט
+models/
+*.wav
+*.mp3
+*.srt
+
+# קבצי עבודה פנימיים — נשארים מקומית, לא עולים ל-GitHub
+START_HERE.md
+GOAL.md
+GOAL_LEVEL_B.md
+MULTI_AGENT_BUILD.md
+RUN.md
+STORE_LISTING.md
+BUILD_SPEC.md
+CONTEXT.md
+IDEAS.md
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# logs
+*.log
+
+# build artifacts
+dist/
+
+# חבילת עיצוב (רפרנס בלבד — לא חלק מהמוצר)
+תמלול כתוביות עברית/
+תמלול כתוביות עברית.zip

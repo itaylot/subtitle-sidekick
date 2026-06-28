@@ -4,6 +4,7 @@ faster-whisper + מודל ivrit-ai. זיהוי GPU אוטומטי (NVIDIA → פ
 """
 
 import os
+import re
 import json
 import time
 
@@ -52,10 +53,10 @@ def _load_model(name):
     from faster_whisper import WhisperModel
     dev, ct = _resolve_device()
     try:
-        m = WhisperModel(name, device=dev, compute_type=ct, cpu_threads=CPU_THREADS)
+        m = WhisperModel(name, device=dev, compute_type=ct, cpu_threads=CPU_THREADS, num_workers=1)
         return m, dev
     except Exception:
-        m = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=CPU_THREADS)
+        m = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=CPU_THREADS, num_workers=1)
         return m, "cpu"
 
 
@@ -143,6 +144,196 @@ def make_viewer(video, cues):
     return out
 
 
+# ── ספריית הרצאות (Library): קורסים + הרצאות שתמללנו, נשמר ב-JSON ──
+LIB_DIR = os.path.join(os.path.expanduser("~"), "Videos", "Subtitle Sidekick")
+LIB_PATH = os.path.join(LIB_DIR, "library.json")
+
+
+def load_library():
+    """מחזיר {courses: [...], lectures: [...]} (נוצר ריק אם אין)."""
+    try:
+        with open(LIB_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+    data.setdefault("courses", [])
+    data.setdefault("lectures", [])
+    # מסנן הרצאות שהקובץ שלהן כבר לא קיים
+    data["lectures"] = [l for l in data["lectures"] if os.path.exists(l.get("video", ""))]
+    return data
+
+
+def save_library(data):
+    os.makedirs(LIB_DIR, exist_ok=True)
+    with open(LIB_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
+
+
+# ── הגדרות משתמש (מצב תמלול + קונפיג שרת Cloud אישי) — נשמר ב-JSON מקומי ──
+SETTINGS_PATH = os.path.join(LIB_DIR, "settings.json")
+
+
+def load_settings():
+    """מחזיר את ההגדרות עם כל ברירות-המחדל מולאות (מצב תמלול + קונפיג ומונה-עלות לשרת)."""
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+    data.setdefault("transcription_mode", "local_accurate")
+    data.setdefault("cloud", {})
+    c = data["cloud"]
+    c.setdefault("endpoint_url", "")
+    c.setdefault("api_key", "")
+    c.setdefault("price_per_hour", 0)        # מחיר ה-GPU לשעה ($) — לחישוב עלות
+    c.setdefault("total_seconds", 0)         # זמן עיבוד מצטבר בשרת
+    c.setdefault("total_cost", 0)            # עלות מצטברת ($)
+    return data
+
+
+def save_settings(update):
+    """ממזג עדכון חלקי לתוך ההגדרות הקיימות (לא דורס) ושומר. מחזיר את ההגדרות המלאות."""
+    data = load_settings()
+    for k, v in (update or {}).items():
+        if k == "cloud" and isinstance(v, dict):
+            data["cloud"].update(v)
+        else:
+            data[k] = v
+    os.makedirs(LIB_DIR, exist_ok=True)
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
+
+
+def add_cloud_usage(seconds):
+    """מצבר זמן עיבוד בשרת לעלות מצטברת (לפי המחיר-לשעה שהוגדר). מחזיר את ההגדרות המעודכנות."""
+    data = load_settings()
+    seconds = max(0, float(seconds or 0))
+    rate = float(data["cloud"].get("price_per_hour") or 0)
+    data["cloud"]["total_seconds"] = (float(data["cloud"].get("total_seconds") or 0) + seconds)
+    data["cloud"]["total_cost"] = (float(data["cloud"].get("total_cost") or 0) + seconds / 3600.0 * rate)
+    return save_settings({"cloud": {
+        "total_seconds": data["cloud"]["total_seconds"],
+        "total_cost": data["cloud"]["total_cost"],
+    }})
+
+
+def create_course(name):
+    name = (name or "").strip()
+    data = load_library()
+    if name and name not in data["courses"]:
+        data["courses"].append(name)
+        save_library(data)
+    return data
+
+
+def remove_course(name):
+    """מסיר קורס; הרצאותיו עוברות ל'ללא קורס' (הקבצים לא נמחקים)."""
+    data = load_library()
+    data["courses"] = [c for c in data["courses"] if c != name]
+    for l in data["lectures"]:
+        if l.get("course") == name:
+            l["course"] = ""
+    return save_library(data)
+
+
+def add_lecture(video, srt=None, course="", title=None):
+    """רושם הרצאה ב-library (מחליף רשומה קיימת לאותו קובץ). מחזיר את ה-library."""
+    video = os.path.abspath(video)
+    srt = srt or (os.path.splitext(video)[0] + ".srt")
+    title = title or os.path.splitext(os.path.basename(video))[0]
+    data = load_library()
+    data["lectures"] = [l for l in data["lectures"] if l.get("video") != video]
+    data["lectures"].insert(0, {
+        "video": video, "srt": srt, "course": course or "",
+        "title": title, "added": time.time(), "viewed": False,
+    })
+    if course and course not in data["courses"]:
+        data["courses"].append(course)
+    return save_library(data)
+
+
+def remove_lecture(video):
+    video = os.path.abspath(video)
+    data = load_library()
+    data["lectures"] = [l for l in data["lectures"] if l.get("video") != video]
+    return save_library(data)
+
+
+def set_lecture_course(video, course):
+    video = os.path.abspath(video)
+    data = load_library()
+    for l in data["lectures"]:
+        if l.get("video") == video:
+            l["course"] = course or ""
+    if course and course not in data["courses"]:
+        data["courses"].append(course)
+    return save_library(data)
+
+
+def rename_lecture(video, title):
+    """משנה את שם התצוגה ב-library (לא נוגע בקובץ עצמו בדיסק — בטוח גם בזמן ניגון)."""
+    video = os.path.abspath(video)
+    title = (title or "").strip()
+    if not title:
+        return load_library()
+    data = load_library()
+    for l in data["lectures"]:
+        if l.get("video") == video:
+            l["title"] = title
+    return save_library(data)
+
+
+def viewer_path(video):
+    """נתיב נגן-ה-HTML העצמאי של ההרצאה (נוצר בזמן התמלול)."""
+    folder = os.path.dirname(video)
+    base = os.path.splitext(os.path.basename(video))[0]
+    return os.path.join(folder, base + " — כתוביות.html")
+
+
+def _parse_ts(s):
+    s = s.strip().replace(",", ".")
+    h, m, rest = s.split(":")
+    return int(h) * 3600 + int(m) * 60 + float(rest)
+
+
+def parse_srt(srt):
+    """קורא קובץ SRT חזרה לרשימת cues (לפתיחת הרצאה מההיסטוריה בנגן)."""
+    cues = []
+    try:
+        with open(srt, encoding="utf-8") as f:
+            content = f.read()
+    except Exception:
+        return cues
+    for block in re.split(r"\n\s*\n", content.strip()):
+        lines = [l for l in block.splitlines() if l.strip()]
+        tline = next((l for l in lines if "-->" in l), None)
+        if not tline:
+            continue
+        try:
+            a, b = tline.split("-->")
+            start, end = _parse_ts(a), _parse_ts(b)
+        except Exception:
+            continue
+        text = " ".join(lines[lines.index(tline) + 1:]).strip()
+        if text:
+            cues.append({"start": round(start, 3), "end": round(end, 3), "text": text})
+    return cues
+
+
+def open_lecture(video):
+    """מחזיר {video, cues, srt} להרצאה שמורה — קורא את ה-SRT מהדיסק. מסמן כ'נצפתה'."""
+    video = os.path.abspath(video)
+    data = load_library()
+    lec = next((l for l in data["lectures"] if l.get("video") == video), None)
+    srt = (lec or {}).get("srt") or (os.path.splitext(video)[0] + ".srt")
+    if lec and not lec.get("viewed"):
+        lec["viewed"] = True
+        save_library(data)
+    return {"video": video, "cues": parse_srt(srt), "srt": srt}
+
+
 def download(url, on_progress=None, browser="chrome"):
     """מוריד וידאו מקישור (yt-dlp). מחזיר נתיב הקובץ שירד.
 
@@ -197,15 +388,33 @@ def download(url, on_progress=None, browser="chrome"):
         run(False)
         return holder["path"]
     except Exception as e2:  # noqa: BLE001
-        if "cookie" in cookie_err.lower() or "could not copy" in cookie_err.lower():
+        msg = str(e2)
+        low = msg.lower()
+        # (א) הקישור אינו וידאו ישיר — דף נגן (Moodle/אתר) שאין ממנו מה לחלץ
+        if "unsupported url" in low or "no video" in low or "unable to extract" in low:
+            raise RuntimeError(
+                "הקישור הזה הוא דף נגן (למשל דף וידאו של Moodle), לא קובץ וידאו ישיר — "
+                "אי אפשר להוריד אותו אוטומטית. הורד את הסרטון ידנית וגרור את הקובץ לכאן, "
+                "או מצא את כתובת הווידאו הישירה (mp4/m3u8) והדבק אותה.")
+        # (ב) בעיית קריאת cookies (כרום פתוח/נעול) — להתחברות מאחורי Moodle
+        if "could not copy" in cookie_err.lower() or "cookie" in cookie_err.lower():
             raise RuntimeError(
                 "ל-Moodle צריך להתחבר בכרום ואז לסגור אותו לגמרי (כדי שאפשר יהיה לקרוא את "
                 "ההתחברות), ולנסות שוב.")
-        raise RuntimeError(str(e2))
+        raise RuntimeError(msg)
 
 
-def transcribe(video_path, fast=False, on_progress=None):
-    """מתמלל קובץ → SRT + cues. on_progress(dict) נקרא לאורך הדרך."""
+def transcribe(video_path, fast=False, on_progress=None, cloud=None):
+    """מתמלל קובץ → SRT + cues. on_progress(dict) נקרא לאורך הדרך.
+
+    cloud={"endpoint_url":..., "api_key":...} מנתב לתמלול בשרת חיצוני (cloud_backend)
+    במקום למודל המקומי. שאר האפליקציה מקבלת תמיד את אותו מבנה תוצאה.
+    """
+    if cloud:
+        import cloud_backend
+        return cloud_backend.transcribe_remote(
+            video_path, cloud.get("endpoint_url", ""), cloud.get("api_key", ""), on_progress)
+
     global _model, _model_name, _device
 
     def emit(**kw):
@@ -222,7 +431,8 @@ def transcribe(video_path, fast=False, on_progress=None):
 
     emit(stage="transcribe", percent=0, eta=None, elapsed=0)
     segments, info = _model.transcribe(
-        video_path, language="he", vad_filter=True, beam_size=1)
+        video_path, language="he", vad_filter=True, beam_size=1,
+        vad_parameters={"min_silence_duration_ms": 500})
     dur = getattr(info, "duration", 0) or 0
 
     base = os.path.splitext(video_path)[0]

@@ -1,7 +1,7 @@
-"""app.py — משגר האפליקציה: חלון pywebview שמרנדר את ה-UI (ui/), עם bridge ל-Python.
+"""app.py — application launcher: pywebview window rendering the UI (ui/), with a Python bridge.
 
-ה-UI הוא HTML/CSS/JS נקי (ui/). הלוגיקה כולה ב-engine.py (faster-whisper / ivrit-ai).
-מחלקת Api מחברת את כפתורי ה-UI לפונקציות התמלול ומזרימה התקדמות חזרה ל-DOM.
+The UI is plain HTML/CSS/JS (ui/). All logic lives in engine.py (faster-whisper / ivrit-ai).
+The Api class connects UI buttons to transcription functions and streams progress back to the DOM.
 """
 
 import os
@@ -10,6 +10,7 @@ import json
 import mimetypes
 import threading
 import traceback
+import subprocess
 import faulthandler
 import socketserver
 import http.server
@@ -20,11 +21,12 @@ import webview
 import engine
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+WORKER = os.path.join(HERE, "worker.py")
 INDEX = os.path.join(HERE, "ui", "index.html")
 ICON = os.path.join(HERE, "ui", "icons", "app.ico")
 CRASH_LOG = os.path.join(HERE, "crash.log")
 
-# רישום קריסות לקובץ crash.log (כדי לאבחן קריסות שקטות בלי CMD)
+# write crashes to crash.log so silent crashes can be diagnosed without a CMD window
 _crash_fh = open(CRASH_LOG, "a", encoding="utf-8")
 faulthandler.enable(_crash_fh)
 
@@ -44,14 +46,15 @@ if hasattr(threading, "excepthook"):
         "THREAD EXC: " + "".join(traceback.format_exception(a.exc_type, a.exc_value, a.exc_traceback)))
 
 
-# ── שרת מדיה מקומי ──
-# ה-UI מוגש דרך שרת ה-HTTP של pywebview, ולכן הדפדפן חוסם וידאו מ-file:// (מקור שונה).
-# שרת קטן זה מזרים כל קובץ מקומי לפי נתיב מוחלט (עם תמיכה ב-Range לקפיצה בסרטון).
+# ── local media server ──
+# The UI is served through pywebview's HTTP server, so the browser blocks video from file://
+# (cross-origin). This small server streams any local file by absolute path with Range support
+# so the video element can seek.
 _media_port = None
 
 
 class _MediaHandler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, *args):  # שקט
+    def log_message(self, *args):  # silence
         pass
 
     def do_GET(self):
@@ -105,8 +108,10 @@ def _start_media_server():
 class Api:
     def __init__(self):
         self._window = None
+        self._proc = None         # the current local transcription subprocess (killable)
+        self._cancelled = False
 
-    # בורר קבצים נייטיב — ריבוי בחירה (מחזיר רשימת נתיבים ל-JS)
+    # native file picker — multi-select (returns list of paths to JS)
     def pick_file(self):
         types = (
             "וידאו/אודיו (*.mp4;*.mkv;*.webm;*.mov;*.avi;*.m4v;*.mp3;*.m4a;*.wav)",
@@ -117,7 +122,12 @@ class Api:
             return list(res)
         return None
 
-    # הורדת וידאו מקישור (yt-dlp) → אחרי שירד, נכנס לתור ומתמלל
+    # native folder picker — for choosing the library base folder (where courses/lectures are stored)
+    def pick_folder(self):
+        res = self._window.create_file_dialog(webview.FOLDER_DIALOG)
+        return res[0] if res else None
+
+    # download video from URL (yt-dlp) → after download, enqueue and transcribe
     def download(self, url):
         threading.Thread(target=self._download, args=(url,), daemon=True).start()
 
@@ -134,38 +144,130 @@ class Api:
             _log("DOWNLOAD ERR: " + traceback.format_exc())
             self._js("window.onError", "הורדה נכשלה: " + str(e))
 
-    # התחלת תמלול (לא חוסם — רץ ב-thread, מזרים התקדמות ל-UI)
+    # start transcription (non-blocking). Local runs in a killable subprocess; cloud in a thread.
     def start(self, path, fast, course="", cloud_cfg=None):
-        threading.Thread(target=self._run, args=(path, bool(fast), course or "", cloud_cfg or None), daemon=True).start()
+        if cloud_cfg:
+            threading.Thread(target=self._run_cloud, args=(path, course or "", cloud_cfg), daemon=True).start()
+        else:
+            threading.Thread(target=self._run_local, args=(path, bool(fast), course or ""), daemon=True).start()
 
-    def _run(self, path, fast, course, cloud_cfg):
+    # pause / resume the running local job (cooperative — takes effect at the next segment)
+    def pause(self):
+        self._send_proc("pause\n")
+
+    def resume(self):
+        self._send_proc("resume\n")
+
+    # cancel the running local job: kill the worker process outright (stops at any stage, instantly)
+    def cancel(self):
+        self._cancelled = True
+        p = self._proc
+        if p and p.poll() is None:
+            try:
+                p.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _send_proc(self, line):
+        p = self._proc
+        if p and p.poll() is None and p.stdin:
+            try:
+                p.stdin.write(line)
+                p.stdin.flush()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _finish(self, res, course):
+        """Shared success path: relocate into the course folder (if any), register, notify the UI."""
+        if course:
+            try:
+                res = engine.relocate(res, course)
+            except Exception:  # noqa: BLE001 — transcription succeeded; only the move failed
+                _log("RELOCATE ERR: " + traceback.format_exc())
+                engine.add_lecture(res["video"], res["srt"], course=course)
+                self._js("window.onError", "ההעברה לתיקיית הקורס נכשלה — הקבצים נשארו בתיקיית המקור.")
+                return
+        engine.add_lecture(res["video"], res["srt"], course=course)
+        _log("TRANSCRIBE OK: %s cues, srt=%s" % (res["count"], res["srt"]))
+        self._js("window.onDone", {
+            "video": res["video"], "cues": res["cues"],
+            "srt": res["srt"], "count": res["count"],
+        })
+
+    def _run_local(self, path, fast, course):
+        self._cancelled = False
+        self._proc = None
         try:
-            _log("TRANSCRIBE START: " + str(path) + (" (cloud)" if cloud_cfg else ""))
-            res = engine.transcribe(path, fast=fast, cloud=cloud_cfg,
+            _log("TRANSCRIBE START (local): " + str(path))
+            # ponytail: fresh process per job → model reloads each lecture; persistent worker if that latency bites
+            flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            proc = subprocess.Popen(
+                [sys.executable, WORKER, path, "1" if fast else "0"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=_crash_fh,
+                cwd=HERE, text=True, encoding="utf-8", bufsize=1, creationflags=flags)
+            self._proc = proc
+            if self._cancelled:           # cancel arrived before the handle was stored — honor it now
+                try:
+                    proc.terminate()
+                except Exception:  # noqa: BLE001
+                    pass
+
+            result, error = None, None
+            for line in proc.stdout:                  # streams until the worker exits / is killed
+                if not line:
+                    continue
+                kind, body = line[0], line[1:].strip()
+                if kind == "P":
+                    try:
+                        self._js("window.onProgress", json.loads(body))
+                    except Exception:  # noqa: BLE001
+                        pass
+                elif kind == "D":
+                    result = json.loads(body)
+                elif kind == "E":
+                    error = json.loads(body)
+            proc.wait()
+
+            if self._cancelled:
+                _log("TRANSCRIBE CANCELLED: " + str(path))
+                self._js("window.onCancelled", None)  # killed before SRT was written — nothing to clean up
+            elif error is not None:
+                _log("TRANSCRIBE ERR (worker): " + str(error))
+                self._js("window.onError", str(error))
+            elif result is not None:
+                self._finish(result, course)
+            else:
+                self._js("window.onError", "התמלול נעצר באופן בלתי צפוי.")
+        except Exception:  # noqa: BLE001
+            _log("RUN LOCAL ERR: " + traceback.format_exc())
+            self._js("window.onCancelled", None) if self._cancelled else self._js("window.onError", "שגיאה בהרצת התמלול")
+        finally:
+            self._proc = None
+
+    def _run_cloud(self, path, course, cloud_cfg):
+        self._cancelled = False
+        try:
+            _log("TRANSCRIBE START (cloud): " + str(path))
+            res = engine.transcribe(path, fast=False, cloud=cloud_cfg,
                                      on_progress=lambda p: self._js("window.onProgress", p))
-            engine.add_lecture(res["video"], res["srt"], course=course)  # רישום ל-library
-            if cloud_cfg and res.get("seconds"):  # צבירת עלות לפי זמן העיבוד שהשרת דיווח
+            if res.get("seconds"):  # accumulate cost by processing time reported by server
                 engine.add_cloud_usage(res["seconds"])
-            _log("TRANSCRIBE OK: %s cues, srt=%s" % (res["count"], res["srt"]))
-            self._js("window.onDone", {
-                "video": res["video"], "cues": res["cues"],
-                "srt": res["srt"], "count": res["count"],
-            })
+            self._finish(res, course)
         except Exception as e:  # noqa: BLE001
             _log("TRANSCRIBE ERR: " + traceback.format_exc())
             self._js("window.onError", str(e))
 
-    # רישום שגיאות JS לקובץ crash.log (לאבחון)
+    # log JS errors to crash.log for diagnostics
     def log(self, msg):
         _log("JS: " + str(msg))
 
-    # כתובת לניגון קובץ מקומי דרך שרת המדיה (במקום file:// שנחסם)
+    # URL for playing a local file through the media server (instead of file:// which is blocked)
     def media_url(self, path):
         if not _media_port or not path:
             return ""
         return "http://127.0.0.1:%s/?p=%s" % (_media_port, urllib.parse.quote(os.path.abspath(path)))
 
-    # ── כפתורי חלון (הנקודות הצבעוניות) ──
+    # ── window buttons (the colored dots) ──
     def win_close(self):
         self._window.destroy()
 
@@ -175,14 +277,21 @@ class Api:
     def win_fullscreen(self):
         self._window.toggle_fullscreen()
 
-    # ── הגדרות (מצב תמלול + קונפיג שרת Cloud אישי) ──
+    # ── settings (transcription mode + personal cloud server config) ──
     def get_settings(self):
         return engine.load_settings()
 
     def save_settings(self, data):
         return engine.save_settings(data)
 
-    # ── ספריית הרצאות (library) ──
+    # ── transcription queue persistence (crash recovery) ──
+    def save_queue(self, jobs):
+        return engine.save_queue(jobs)
+
+    def load_queue(self):
+        return engine.load_queue()
+
+    # ── lecture library ──
     def library(self):
         return engine.load_library()
 
@@ -204,7 +313,10 @@ class Api:
     def rename_lecture(self, video, title):
         return engine.rename_lecture(video, title)
 
-    # פתיחת נגן-ה-HTML העצמאי של ההרצאה בדפדפן הרגיל
+    def search(self, query):
+        return engine.search_library(query)
+
+    # open the lecture's standalone HTML player in the default browser
     def open_in_browser(self, video):
         path = engine.viewer_path(video)
         if not os.path.isfile(path):
@@ -215,7 +327,7 @@ class Api:
         except Exception as e:  # noqa: BLE001
             return "ERR: " + str(e)
 
-    # שמירת כתוביות אחרי עריכה
+    # save subtitles after editing
     def save_srt(self, video, cues):
         try:
             engine.save_srt(video, cues)
@@ -223,7 +335,7 @@ class Api:
         except Exception as e:  # noqa: BLE001
             return str(e)
 
-    # ייצוא תמליל (txt / docx) — נשמר ליד הסרטון ונפתח
+    # export transcript (txt / docx) — saved next to the video and opened
     def export(self, video, cues, fmt):
         try:
             out = engine.export_docx(video, cues) if fmt == "docx" else engine.export_txt(video, cues)
@@ -243,7 +355,7 @@ class Api:
 
 
 def _register_drop(window):
-    """גרירת קובץ אמיתית: pywebview מאכלס נתיב מלא רק כשרשום handler דרך ה-DOM API."""
+    """Register real drag-and-drop: pywebview provides the full path only via the DOM API handler."""
     def on_drop(e):
         try:
             files = (e or {}).get("dataTransfer", {}).get("files", [])

@@ -1,35 +1,36 @@
-// app.js — חיבור ה-UI ל-Python (pywebview): תור תמלולים, נגן מסונכרן, מסך מלא.
+// app.js — UI ↔ Python bridge (pywebview): transcription queue, synced player, fullscreen.
 
-// תפיסת שגיאות JS → crash.log (לאבחון קריסות)
+// capture JS errors → crash.log for diagnostics
 function _log(m) { try { window.pywebview.api.log(m); } catch (e) {} }
 window.onerror = (m, s, l, c) => _log(`onerror: ${m} @${l}:${c}`);
 window.addEventListener("unhandledrejection", (e) => _log("reject: " + e.reason));
 
 const $ = (id) => document.getElementById(id);
 
-// תור: כל פריט { path, name, status:'wait'|'proc'|'done'|'err', res }
+// queue: each job { id, sourcePath, name, courseName, status:'queued'|'running'|'done'|'failed', error, createdAt, res }
+// JS owns the queue state; Python is a worker + persists it (engine.save_queue/load_queue).
 let queue = [];
 let processing = false;
 let lastError = "";
 
-// ── מעבר בין מסכים ──
+// ── screen switching ──
+let currentView = "home";
 function show(view) {
   for (const id of ["view-home", "view-open", "view-proc", "view-play"]) {
     $(id).hidden = id !== "view-" + view;
   }
+  currentView = view;
   if (view === "home") refreshHome();
 }
-function currentView() {
-  for (const v of ["home", "open", "proc", "play"]) if (!$("view-" + v).hidden) return v;
-  return "home";
-}
-let returnView = "open";  // לאן "חזרה" בנגן תוביל — נקבע לפי המסך שהיינו בו לפני הפעלת ההרצאה
+
+// where "back" in the player leads — set based on which screen we came from
+let returnView = "open";
 function setReturnView(v) {
   returnView = v;
   $("backBtn").title = v === "proc" ? "חזרה לתור" : "חזרה לרשימה";
 }
 
-// ── שבשבת תמלול-ברקע בסרגל העליון: גלוי מכל מסך, מאפשר לעבור ולחזור לתור ──
+// ── background transcription indicator in the top bar: visible from any screen ──
 function updateJobPill(pct) {
   const pill = $("jobPill");
   pill.hidden = !processing;
@@ -38,7 +39,7 @@ function updateJobPill(pct) {
 $("jobPill").addEventListener("click", () => show("proc"));
 $("homeBtn").addEventListener("click", () => show("home"));
 
-// ── מצב בהיר/כהה ──
+// ── light / dark theme ──
 function applyTheme(t) {
   document.body.classList.toggle("dark", t === "dark");
   try { localStorage.setItem("theme", t); } catch (e) {}
@@ -47,13 +48,13 @@ $("themeBtn").addEventListener("click", () =>
   applyTheme(document.body.classList.contains("dark") ? "light" : "dark"));
 applyTheme(localStorage.getItem("theme") || "light");
 
-// ── כפתורי חלון (הנקודות הצבעוניות) ──
+// ── window buttons (the colored dots) ──
 $("winClose").addEventListener("click", () => window.pywebview.api.win_close());
 $("winMin").addEventListener("click", () => window.pywebview.api.win_minimize());
 $("winFull").addEventListener("click", () => window.pywebview.api.win_fullscreen());
 
-// ── בורר מצב תמלול: מקומי-מדויק / מקומי-מהיר / שרת(ענן) ──
-// נשמר/נטען מההגדרות כדי לזכור את הבחירה האחרונה.
+// ── transcription mode selector: local-accurate / local-fast / cloud ──
+// persisted in settings so the last choice is remembered.
 function applyPrivNote() {
   const note = $("privNote");
   if ($("modeSel").value === "cloud") {
@@ -66,23 +67,31 @@ $("modeSel").addEventListener("change", () => {
   applyPrivNote();
   const mode = $("modeSel").value;
   window.pywebview.api.save_settings({ transcription_mode: mode }).catch(() => {});
-  // אם החזרנו ממצב שרת ללא-קונפיג למצב מקומי בזמן שתור ממתין — להמשיך לתמלל
-  if (mode !== "cloud" && !processing && queue.some((q) => q.status === "wait")) processNext();
+  // if user switched away from unconfigured cloud mode while queue is waiting — resume
+  if (mode !== "cloud" && !processing && queue.some((q) => q.status === "queued")) processNext();
 });
 
-// ── מגירת הגדרות שרת (Cloud GPU אישי) ──
+// ── cloud server settings drawer ──
 function fmtCost(n) { return "$" + (Number(n) || 0).toFixed(2); }
 function openSettingsDrawer() {
   $("settingsDrawer").hidden = false; $("settingsOv").hidden = false;
   $("settingsStatus").textContent = "";
   window.pywebview.api.get_settings().then((s) => {
     const cloud = (s && s.cloud) || {};
+    $("settingsLibDir").value = (s && s.library_dir) || "";
     $("settingsEndpoint").value = cloud.endpoint_url || "";
     $("settingsKey").value = cloud.api_key || "";
     $("settingsPrice").value = cloud.price_per_hour || "";
     renderCost(cloud);
   });
 }
+$("settingsLibDirBtn").addEventListener("click", async () => {
+  const dir = await window.pywebview.api.pick_folder();
+  if (!dir) return;
+  $("settingsLibDir").value = dir;
+  await window.pywebview.api.save_settings({ library_dir: dir });
+  $("settingsStatus").textContent = "תיקיית הספרייה עודכנה ✓";
+});
 function renderCost(cloud) {
   const secs = Number(cloud.total_seconds) || 0;
   $("costTotal").textContent = fmtCost(cloud.total_cost);
@@ -108,19 +117,31 @@ $("costReset").addEventListener("click", () => {
     .then((s) => renderCost((s && s.cloud) || {}));
 });
 
-// מחזיר {endpoint_url, api_key} אם תקין, null אם לא במצב שרת, או undefined אם שרת לא מוגדר (ביטול)
+// returns {endpoint_url, api_key} if valid, null if not in cloud mode, undefined if cloud not configured (cancel)
 async function resolveCloudCfg() {
   if ($("modeSel").value !== "cloud") return null;
   const s = await window.pywebview.api.get_settings();
   const cloud = (s && s.cloud) || {};
   if (!cloud.endpoint_url) {
-    alert("הגדירו שרת לפני שימוש במצב 'שרת GPU (ענן)' — לחצו ⚙ הגדרות שרת.");
+    // gently guide to setup instead of a dead-end alert
+    openSettingsDrawer();
+    $("settingsStatus").textContent = "כדי להשתמש במצב הענן — הזינו כתובת שרת ומפתח, ושמרו.";
     return undefined;
   }
   return cloud;
 }
 
-// טעינת מצב התמלול השמור בעת עליית האפליקציה
+// ── first-run onboarding (explains the 3 modes once) ──
+$("onboardClose").addEventListener("click", () => {
+  $("onboardOv").hidden = true;
+  try { localStorage.setItem("onboarded", "1"); } catch (e) {}
+});
+(function showOnboardingIfFirstRun() {
+  try { if (localStorage.getItem("onboarded")) return; } catch (e) { return; }
+  $("onboardOv").hidden = false;
+})();
+
+// restore saved transcription mode on startup
 window.addEventListener("pywebviewready", () => {
   window.pywebview.api.get_settings().then((s) => {
     if (s && s.transcription_mode) {
@@ -129,9 +150,19 @@ window.addEventListener("pywebviewready", () => {
     }
     applyPrivNote();
   }).catch(() => {});
+
+  // crash recovery: resume any queue left over from a previous run (runs in background)
+  Promise.resolve(refreshLibrary()).finally(() => {
+    window.pywebview.api.load_queue().then((jobs) => {
+      if (!Array.isArray(jobs) || !jobs.length) return;
+      queue = jobs.map((j) => ({ ...j, name: j.sourcePath.split(/[\\/]/).pop(), res: null }));
+      renderQueue();
+      if (!processing) processNext();
+    }).catch(() => {});
+  });
 });
 
-// ── בחירת קובץ (ריבוי) ──
+// ── file picker (multi-select) ──
 async function pickAndStart() {
   const res = await window.pywebview.api.pick_file();
   if (res) window.enqueueFiles(Array.isArray(res) ? res : [res]);
@@ -139,7 +170,7 @@ async function pickAndStart() {
 $("pickBtn").addEventListener("click", (e) => { e.stopPropagation(); pickAndStart(); });
 $("drop").addEventListener("click", pickAndStart);
 
-// ── הורדה מקישור ──
+// ── download from URL ──
 function startDownload() {
   const url = $("urlIn").value.trim();
   if (!url) return;
@@ -163,19 +194,19 @@ window.onDownload = function (p) {
     $("fill").style.width = "100%"; $("pct").textContent = "100%";
     $("eta").textContent = "ההורדה הושלמה — מתחיל תמלול…";
   } else if (pct > 0) {
-    // יודעים את הגודל — פס התקדמות אמיתי
+    // known size — real progress bar
     $("bar2").classList.remove("loading");
     $("fill").style.width = pct + "%"; $("pct").textContent = pct + "%";
     $("eta").textContent = "מוריד מהאינטרנט…";
   } else {
-    // גודל לא ידוע (סטרימינג/Moodle) — פס "רץ" במקום 0% תקוע
+    // unknown size (streaming/Moodle) — animated bar instead of stuck 0%
     $("bar2").classList.add("loading");
     $("pct").textContent = "";
     $("eta").textContent = "מוריד מהאינטרנט…";
   }
 };
 
-// ── גרירה (הטיפול בקובץ ב-Python; כאן ויזואל בלבד) ──
+// ── drag-and-drop (file handling is in Python; this is visual only) ──
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
 const drop = $("drop");
@@ -186,25 +217,49 @@ drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove
 drop.addEventListener("mouseenter", () => drop.classList.add("hover"));
 drop.addEventListener("mouseleave", () => drop.classList.remove("hover"));
 
-// ── תור ──
+// ── queue persistence (atomic JSON in Python; debounced from JS) ──
+function serializeQueue() {
+  // res/name are runtime-only; persist just the schema fields
+  return queue.map(({ id, sourcePath, courseName, status, error, createdAt }) =>
+    ({ id, sourcePath, courseName, status, error: error || null, createdAt }));
+}
+let _saveTimer = null;
+function saveQueueSoon() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    try { window.pywebview.api.save_queue(serializeQueue()); } catch (e) {}
+  }, 300);
+}
+
+// ── queue ──
 window.enqueueFiles = function (paths) {
+  const course = $("courseSel").value || "";  // current course = destination folder for this batch
   for (const p of paths) {
-    if (!p || queue.some((q) => q.path === p)) continue;
-    queue.push({ path: p, name: p.split(/[\\/]/).pop(), status: "wait", res: null });
+    if (!p || queue.some((q) => q.sourcePath === p)) continue;
+    queue.push({
+      id: crypto.randomUUID(),
+      sourcePath: p,
+      name: p.split(/[\\/]/).pop(),
+      courseName: course,
+      status: "queued",
+      error: null,
+      createdAt: new Date().toISOString(),
+      res: null,
+    });
   }
   renderQueue();
+  saveQueueSoon();
   show("proc");
   if (!processing) processNext();
 };
 
 async function processNext() {
-  const item = queue.find((q) => q.status === "wait");
+  const item = queue.find((q) => q.status === "queued");
   if (!item) {
     processing = false;
     const doneCount = queue.filter((q) => q.status === "done").length;
-    const errCount = queue.filter((q) => q.status === "err").length;
+    const errCount = queue.filter((q) => q.status === "failed").length;
     if (doneCount > 0) {
-      // יש לפחות הרצאה אחת מוכנה
       $("stageHeading").textContent = doneCount > 1 ? "ההרצאות מוכנות ✓" : "הכתוביות מוכנות ✓";
       $("eta").textContent = errCount
         ? `${errCount} מתוך ${doneCount + errCount} נכשלו — השאר מוכנות.`
@@ -214,7 +269,7 @@ async function processNext() {
       $("watchDone").hidden = false;
       updateJobPill();
     } else {
-      // הכל נכשל — להציג את השגיאה במקום "מוכנות"
+      // everything failed — show error instead of "ready"
       $("stageHeading").textContent = "התמלול נכשל ✕";
       $("eta").textContent = lastError || "אירעה שגיאה. בדקו את crash.log לפרטים.";
       $("fill").style.width = "0"; $("pct").textContent = "";
@@ -222,53 +277,62 @@ async function processNext() {
       $("watchDone").hidden = true;
       updateJobPill();
     }
+    setJobCtrl(false);
     return;
   }
   const cloudCfg = await resolveCloudCfg();
   if (cloudCfg === undefined) {
-    // מצב שרת בלי קונפיג — לא מתחילים, נותנים למשתמש לבחור מצב אחר או להגדיר שרת
+    // cloud mode without config — don't start, let user pick a mode or configure server
     return;
   }
   const fast = $("modeSel").value === "local_fast";
   processing = true;
   $("watchDone").hidden = true;
   updateJobPill(0);
-  item.status = "proc";
+  item.status = "running";
+  saveQueueSoon();
   const idx = queue.filter((q) => q.status === "done").length + 1;
   $("procName").textContent = (queue.length > 1 ? `(${idx}/${queue.length}) ` : "") + item.name;
   $("fill").style.width = "0"; $("pct").textContent = "0%"; $("eta").textContent = "";
   resetSteps();
   renderQueue();
-  window.pywebview.api.start(item.path, fast, $("courseSel").value || "", cloudCfg);
+  setJobCtrl(!cloudCfg);  // pause/cancel only apply to local transcription (cloud is a single fast call)
+  window.pywebview.api.start(item.sourcePath, fast, item.courseName || "", cloudCfg);
 }
 
-function resetSteps(allDone) {
-  for (const s of ["extract", "transcribe", "sync"]) {
-    const el = $("step-" + s);
-    el.className = "step" + (allDone ? " done" : "");
-    el.textContent = (allDone ? "✓ " : "") + { extract: "אודיו", transcribe: "תמלול", sync: "סנכרון" }[s];
+// ── pause / cancel controls for the running local job ──
+let paused = false;
+function setJobCtrl(show) {
+  $("jobCtrl").hidden = !show;
+  if (!show) { paused = false; $("pauseBtn").textContent = "⏸ השהה"; }
+}
+$("pauseBtn").addEventListener("click", () => {
+  paused = !paused;
+  if (paused) {
+    window.pywebview.api.pause();
+    $("pauseBtn").textContent = "▶ המשך";
+    $("stageHeading").textContent = "מושהה — לחצו 'המשך' כדי להמשיך";
+  } else {
+    window.pywebview.api.resume();
+    $("pauseBtn").textContent = "⏸ השהה";
   }
-}
+});
+let cancelling = false;
+$("cancelBtn").addEventListener("click", () => {
+  const ok = confirm(
+    "לבטל את התמלול הנוכחי?\n\n" +
+    "ההתקדמות עד כה תימחק ולא תישמר — תצטרכו להתחיל את ההרצאה הזו מחדש. " +
+    "שאר ההרצאות בתור ימשיכו כרגיל.");
+  if (!ok) return;
+  cancelling = true;                       // suppress further progress + show immediate feedback
+  $("jobCtrl").hidden = true;
+  $("stageHeading").textContent = "מבטל…";
+  $("eta").textContent = "";
+  $("bar2").classList.remove("loading");
+  window.pywebview.api.cancel();
+});
 
-function renderQueue() {
-  if (queue.length < 2 && !queue.some((q) => q.status === "done")) { $("queue").innerHTML = ""; return; }
-  $("queue").innerHTML = "";
-  const ICON = { wait: "•", proc: "●", done: "✓", err: "✕" };
-  queue.forEach((q, i) => {
-    const row = document.createElement("div");
-    row.className = "qitem " + q.status;
-    row.innerHTML = `<span class="qicon">${ICON[q.status]}</span><span class="qname">${esc(q.name)}</span>`;
-    if (q.status === "done") {
-      const b = document.createElement("button");
-      b.className = "qwatch"; b.textContent = "▶ צפה";
-      b.onclick = () => watchItem(i);
-      row.appendChild(b);
-    }
-    $("queue").appendChild(row);
-  });
-}
-function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
-
+const STAGE_LABEL = { extract: "אודיו", transcribe: "תמלול", sync: "סנכרון" };
 const STAGE_HEAD = {
   extract: "מכין את האודיו…",
   transcribe: "מתמלל את ההרצאה לעברית…",
@@ -276,14 +340,139 @@ const STAGE_HEAD = {
 };
 const STAGE_ORDER = ["extract", "transcribe", "sync"];
 
-// ── עדכון התקדמות (נקרא מ-Python) ──
+function resetSteps(allDone) {
+  for (const s of STAGE_ORDER) {
+    const el = $("step-" + s);
+    el.className = "step" + (allDone ? " done" : "");
+    el.textContent = (allDone ? "✓ " : "") + STAGE_LABEL[s];
+  }
+}
+
+function renderQueue() {
+  const wrap = $("queue");
+  wrap.innerHTML = "";
+  if (!queue.length) return;
+  const ICON = { queued: "•", running: "●", done: "✓", failed: "✕" };
+  const courses = (library && library.courses) || [];
+
+  // header: title + live summary (active / done / failed)
+  const done = queue.filter((q) => q.status === "done").length;
+  const failed = queue.filter((q) => q.status === "failed").length;
+  const active = queue.filter((q) => q.status === "queued" || q.status === "running").length;
+  const head = document.createElement("div");
+  head.className = "queue-head";
+  const sum = [];
+  if (active) sum.push(`${active} בתור`);
+  if (done) sum.push(`${done} הושלמו`);
+  if (failed) sum.push(`${failed} נכשלו`);
+  head.innerHTML =
+    `<span class="qh-title">תור התמלול</span><span class="qh-sub">${sum.join(" · ")}</span>`;
+  wrap.appendChild(head);
+
+  queue.forEach((q) => {
+    const row = document.createElement("div");
+    row.className = "qitem " + q.status;
+    row.dataset.id = q.id;
+
+    const icon = document.createElement("span");
+    icon.className = "qicon"; icon.textContent = ICON[q.status] || "•";
+    const name = document.createElement("span");
+    name.className = "qname"; name.textContent = q.name; name.title = q.name;
+
+    if (q.status === "queued") {
+      const grip = document.createElement("span");        // visible drag affordance
+      grip.className = "qgrip"; grip.textContent = "⋮⋮"; grip.title = "גררו לשינוי הסדר";
+      grip.setAttribute("aria-hidden", "true");
+      row.appendChild(grip);
+    }
+    row.appendChild(icon); row.appendChild(name);
+
+    if (q.status === "queued") {
+      // drag to reorder + per-item destination course
+      row.draggable = true;
+      addDragHandlers(row, q);
+      const sel = document.createElement("select");
+      sel.className = "qcourse"; sel.title = "תיקיית יעד";
+      sel.innerHTML = '<option value="">ללא קורס</option>';
+      const opts = courses.includes(q.courseName) || !q.courseName ? courses : [q.courseName, ...courses];
+      for (const c of opts) {
+        const o = document.createElement("option");
+        o.value = c; o.textContent = c;
+        sel.appendChild(o);
+      }
+      sel.value = q.courseName || "";
+      sel.onchange = () => { q.courseName = sel.value; saveQueueSoon(); };
+      // dragging the row shouldn't start when interacting with the select
+      sel.addEventListener("mousedown", (e) => e.stopPropagation());
+      sel.draggable = false;
+      row.appendChild(sel);
+
+      const del = document.createElement("button");
+      del.className = "qdel"; del.textContent = "✕"; del.title = "הסר מהתור";
+      del.onclick = () => { queue = queue.filter((x) => x !== q); renderQueue(); saveQueueSoon(); };
+      row.appendChild(del);
+    } else if (q.courseName) {
+      const tag = document.createElement("span");
+      tag.className = "qtag"; tag.textContent = q.courseName;
+      row.appendChild(tag);
+    }
+
+    if (q.status === "done") {
+      const b = document.createElement("button");
+      b.className = "qwatch"; b.textContent = "▶ צפה";
+      b.onclick = () => watchItem(queue.indexOf(q));
+      row.appendChild(b);
+    }
+    wrap.appendChild(row);
+  });
+}
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+// ── native HTML5 drag-and-drop reorder (queued items only) ──
+let dragId = null;
+function addDragHandlers(row, q) {
+  row.addEventListener("dragstart", (e) => {
+    dragId = q.id; row.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", q.id); } catch (err) {}
+  });
+  row.addEventListener("dragend", () => {
+    dragId = null; row.classList.remove("dragging");
+    document.querySelectorAll(".qitem.drag-over").forEach((el) => el.classList.remove("drag-over"));
+  });
+  row.addEventListener("dragenter", (e) => { e.preventDefault(); if (dragId && q.id !== dragId) row.classList.add("drag-over"); });
+  row.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; });
+  row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+  row.addEventListener("drop", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    row.classList.remove("drag-over");
+    reorderQueue(dragId, q.id);
+  });
+}
+function reorderQueue(fromId, toId) {
+  if (!fromId || fromId === toId) return;
+  const from = queue.findIndex((x) => x.id === fromId);
+  const target = queue.find((x) => x.id === toId);
+  if (from < 0 || !target || target.status !== "queued") return;  // only reorder among queued
+  const [moved] = queue.splice(from, 1);
+  const to = queue.findIndex((x) => x.id === toId);
+  queue.splice(to, 0, moved);
+  renderQueue();
+  saveQueueSoon();
+}
+
+// ── progress update (called from Python) ──
 window.onProgress = function (p) {
+  if (cancelling) return;  // user is cancelling — ignore late progress from the dying job
+  if (p.paused) {  // engine entered the paused wait — keep the paused UI, don't overwrite it
+    $("stageHeading").textContent = "מושהה — לחצו 'המשך' כדי להמשיך";
+    return;
+  }
   $("stageHeading").textContent = STAGE_HEAD[p.stage] || "";
   const idx = STAGE_ORDER.indexOf(p.stage);
   STAGE_ORDER.forEach((s, i) => {
-    const lbl = { extract: "אודיו", transcribe: "תמלול", sync: "סנכרון" }[s];
     $("step-" + s).className = "step" + (i < idx ? " done" : i === idx ? " now" : "");
-    $("step-" + s).textContent = (i < idx ? "✓ " : "") + lbl;
+    $("step-" + s).textContent = (i < idx ? "✓ " : "") + STAGE_LABEL[s];
   });
 
   if (p.loading) {
@@ -312,16 +501,17 @@ function fmtEta(sec) {
   return m ? `${m}:${String(s).padStart(2, "0")} דקות` : `${s} שניות`;
 }
 
-// ── סיום קובץ → המשך לתור ──
+// ── file done → advance queue ──
 window.onDone = function (res) {
-  const cur = queue.find((q) => q.status === "proc");
+  const cur = queue.find((q) => q.status === "running");
   if (cur) { cur.status = "done"; cur.res = res; }
   renderQueue();
-  refreshLibrary();  // ההרצאה נרשמה ב-library — לרענן את התפריט
-  processNext();     // יציג את מסך הסיום + כפתור "הפעל את הכתוביות"
+  saveQueueSoon();
+  refreshLibrary();  // lecture registered in library — refresh sidebar
+  processNext();     // show finish screen + "play subtitles" button
 };
 
-// אינדקס ההרצאה המוכנה האחרונה (לכפתור "הפעל את הכתוביות")
+// index of the last completed lecture (for "play subtitles" button)
 function lastDoneIndex() {
   for (let i = queue.length - 1; i >= 0; i--) if (queue[i].status === "done") return i;
   return -1;
@@ -331,20 +521,41 @@ $("watchDone").addEventListener("click", () => {
   if (i >= 0) watchItem(i);
 });
 
-// "הרצאה חדשה" — חזרה למסך הפתיחה כדי לתמלל עוד, בלי לסגור את האפליקציה
+// "new lecture" — go back to the open screen without closing the app
 $("newLec").addEventListener("click", () => show("open"));
 
 window.onError = function (msg) {
   lastError = msg || "";
   _log("UI onError: " + lastError);
-  const cur = queue.find((q) => q.status === "proc");
-  if (cur) cur.status = "err";
+  const cur = queue.find((q) => q.status === "running");
+  if (cur) { cur.status = "failed"; cur.error = lastError; }
   $("bar2").classList.remove("loading");
   renderQueue();
-  processNext();  // יחליט אם להציג "מוכנות" או "נכשל" לפי המצב בתור
+  saveQueueSoon();
+  processNext();  // decides whether to show "ready" or "failed" based on queue state
 };
 
-// ── נגן ──
+// user cancelled the current job → drop it (no output was written) and continue with the rest
+window.onCancelled = function () {
+  cancelling = false;
+  paused = false;
+  processing = false;
+  const cur = queue.find((q) => q.status === "running");
+  if (cur) queue = queue.filter((q) => q !== cur);
+  setJobCtrl(false);
+  $("bar2").classList.remove("loading");
+  $("fill").style.width = "0"; $("pct").textContent = "";
+  updateJobPill();
+  renderQueue();
+  saveQueueSoon();
+  if (queue.some((q) => q.status === "queued")) {
+    processNext();          // more lectures waiting → keep going
+  } else {
+    show("open");           // nothing left → leave the processing screen, ready for a new file
+  }
+};
+
+// ── player ──
 const video = $("video");
 const screenEl = document.querySelector(".screen");
 let cues = [];
@@ -358,14 +569,14 @@ async function watchItem(i) {
   cues = it.res.cues || [];
   currentVideo = it.res.video;
   video.src = await window.pywebview.api.media_url(currentVideo);
-  setReturnView(currentView());
+  setReturnView(currentView);
   setPlayTitle(currentVideo);
   show("play");
   video.load();
   renderTranscript();
 }
 
-// ── פאנל תמליל: עריכה + קפיצה ──
+// ── transcript panel: edit + jump ──
 function renderTranscript() {
   const list = $("tcList");
   list.innerHTML = "";
@@ -392,7 +603,7 @@ function renderTranscript() {
   $("tcStatus").textContent = "";
 }
 
-// חיפוש
+// search within transcript
 $("tcSearch").addEventListener("input", (e) => {
   const q = e.target.value.trim();
   rowEls.forEach((row, idx) => {
@@ -400,14 +611,14 @@ $("tcSearch").addEventListener("input", (e) => {
   });
 });
 
-// שמירת עריכות
+// save edits
 $("saveBtn").addEventListener("click", async () => {
   $("tcStatus").textContent = "שומר…";
   const r = await window.pywebview.api.save_srt(currentVideo, cues);
   $("tcStatus").textContent = r === true ? "✓ הכתוביות נשמרו" : "שגיאה: " + r;
 });
 
-// ייצוא
+// export
 async function doExport(fmt) {
   $("tcStatus").textContent = "מייצא…";
   const r = await window.pywebview.api.export(currentVideo, cues, fmt);
@@ -420,7 +631,7 @@ $("playBtn").addEventListener("click", () => { video.paused ? video.play() : vid
 video.addEventListener("play", () => ($("playBtn").textContent = "⏸"));
 video.addEventListener("pause", () => ($("playBtn").textContent = "▶"));
 
-// דילוג 10 שניות קדימה/אחורה
+// skip 10 seconds forward/back
 $("skipBack").addEventListener("click", () => {
   video.currentTime = Math.max(0, video.currentTime - 10);
 });
@@ -428,7 +639,7 @@ $("skipFwd").addEventListener("click", () => {
   video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
 });
 
-// מהירות ניגון — תפריט גלילה
+// playback speed
 $("speedSel").addEventListener("change", () => {
   video.playbackRate = parseFloat($("speedSel").value);
 });
@@ -443,7 +654,7 @@ video.addEventListener("timeupdate", () => {
     if (rowEls[curRow]) rowEls[curRow].classList.remove("cur");
     if (rowEls[idx]) {
       rowEls[idx].classList.add("cur");
-      // גלילה רק אם לא עורכים כרגע
+      // only auto-scroll when not actively editing
       if (!(document.activeElement && document.activeElement.classList.contains("tc-text"))) {
         rowEls[idx].scrollIntoView({ block: "nearest" });
       }
@@ -458,12 +669,12 @@ $("track").addEventListener("click", (e) => {
   if (video.duration) video.currentTime = Math.min(1, Math.max(0, frac)) * video.duration;
 });
 
-// מסך מלא על המכל (לא על ה-video) — כך הכתובית נשארת מוצגת
+// fullscreen on the container (not the video element) — keeps subtitle overlay visible
 $("fsBtn").addEventListener("click", () => {
   if (document.fullscreenElement) document.exitFullscreen();
   else if (screenEl.requestFullscreen) screenEl.requestFullscreen();
 });
-// כפתור יציאה גלוי בתוך מסך מלא — לא כולם זוכרים ESC
+// exit button visible inside fullscreen — not everyone remembers ESC
 $("exitFs").addEventListener("click", () => document.exitFullscreen());
 document.addEventListener("fullscreenchange", () => {
   $("exitFs").hidden = document.fullscreenElement !== screenEl;
@@ -480,10 +691,10 @@ function clock(sec) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// ── ספריית הרצאות + תפריט צד ──
+// ── lecture library + sidebar ──
 let library = { courses: [], lectures: [] };
 
-// כותרת מסך הנגן — לפי הרישום ב-library, או שם הקובץ אם עדיין לא נרשם
+// player title — from library entry if registered, otherwise filename
 function setPlayTitle(path) {
   const lec = library.lectures.find((l) => l.video === path);
   $("playTitle").textContent = lec ? lec.title : path.split(/[\\/]/).pop().replace(/\.[^.]+$/, "");
@@ -502,7 +713,7 @@ async function refreshLibrary() {
   renderDrawer();
 }
 
-// בורר הקורס במסך הפתיחה (שומר את הבחירה הנוכחית)
+// course selector on the open screen (preserves current selection)
 function renderCourseSelect() {
   const sel = $("courseSel");
   const cur = sel.value;
@@ -515,7 +726,7 @@ function renderCourseSelect() {
   if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
 }
 
-// רשימת הקורסים בתפריט הצד, כל אחד נפתח להרצאות שלו
+// course list in sidebar, each collapsible to show its lectures
 function renderDrawer() {
   const wrap = $("coursesList");
   wrap.innerHTML = "";
@@ -525,7 +736,7 @@ function renderDrawer() {
     const key = l.course || "";
     (byCourse[key] = byCourse[key] || []).push(l);
   }
-  // סדר: קורסים לפי שם, ואז "ללא קורס" בסוף (אם יש)
+  // order: courses alphabetically, then "no course" at the end (if any)
   const names = library.courses.slice();
   if (byCourse[""] && byCourse[""].length) names.push("");
 
@@ -590,7 +801,7 @@ function renderDrawer() {
 
 const openCourses = new Set();
 
-// ── מסך הבית: סטטיסטיקה + טיפ + פעולות מהירות ──
+// ── home screen: stats + tip + quick actions ──
 const LEARNING_TIPS = [
   "שיטת פומודורו: 25 דקות למידה ממוקדת, 5 דקות הפסקה. אחרי 4 מחזורים — הפסקה ארוכה של 15-30 דקות.",
   "שמיעת הרצאה פעם שנייה במהירות 1.5x-2x עוזרת לחזק זכירה, אחרי שכבר הבנתם את התוכן בפעם הראשונה.",
@@ -663,8 +874,8 @@ async function refreshHome() {
 $("homeNewLec").addEventListener("click", () => show("open"));
 $("homeCourses").addEventListener("click", openDrawer);
 
-// ── תפריט פעולות צף (שינוי שם / העברה לקורס / פתיחה בדפדפן / הסרה) ──
-// משמש גם בשורות ההרצאה בתפריט הצד וגם בכפתור ה-⋯ במסך הנגן.
+// ── floating action menu (rename / move to course / open in browser / remove) ──
+// used both in sidebar lecture rows and the ⋯ button in the player.
 function showActionMenu(anchorEl, video, course, title) {
   document.querySelectorAll(".actionmenu").forEach((m) => m.remove());
 
@@ -732,30 +943,72 @@ function showActionMenu(anchorEl, video, course, title) {
   document.addEventListener("click", closeOnOutside, true);
 }
 
-// פתיחת הרצאה שמורה בנגן (קורא את ה-SRT מהדיסק)
-async function openLecture(path) {
+// open a saved lecture in the player (reads SRT from disk). seekTo (seconds) is optional.
+async function openLecture(path, seekTo) {
   let r;
   try { r = await window.pywebview.api.open_lecture(path); } catch (e) { return; }
   if (!r) return;
   cues = r.cues || [];
   currentVideo = r.video;
   video.src = await window.pywebview.api.media_url(currentVideo);
-  setReturnView(currentView());
+  setReturnView(currentView);
   setPlayTitle(currentVideo);
   closeDrawer();
   show("play");
   video.load();
   renderTranscript();
+  if (seekTo != null) {
+    video.addEventListener("loadedmetadata", () => { video.currentTime = seekTo; video.play(); }, { once: true });
+  }
 }
 
-// ── פתיחה/סגירה של התפריט ──
+// ── global search (home screen) ──
+let _searchTimer = null;
+$("searchIn").addEventListener("input", () => {
+  clearTimeout(_searchTimer);
+  const q = $("searchIn").value.trim();
+  if (!q) { $("searchResults").hidden = true; return; }
+  _searchTimer = setTimeout(async () => {
+    const results = await window.pywebview.api.search(q);
+    renderSearchResults(results, q);
+  }, 300);
+});
+
+function renderSearchResults(results, q) {
+  const el = $("searchResults");
+  el.innerHTML = "";
+  if (!results.length) {
+    el.innerHTML = `<div class="sr-empty">לא נמצאו תוצאות עבור "${esc(q)}"</div>`;
+    el.hidden = false;
+    return;
+  }
+  for (const r of results) {
+    for (const hit of r.hits) {
+      const row = document.createElement("div");
+      row.className = "sr-hit";
+      row.innerHTML =
+        `<span class="sr-time">${clock(hit.start)}</span>` +
+        `<div class="sr-body"><div class="sr-title">${esc(r.title)}</div>` +
+        `<div class="sr-text">${esc(hit.text)}</div></div>`;
+      row.onclick = () => {
+        $("searchIn").value = "";
+        el.hidden = true;
+        openLecture(r.video, hit.start);
+      };
+      el.appendChild(row);
+    }
+  }
+  el.hidden = false;
+}
+
+// ── sidebar open/close ──
 function openDrawer() { $("drawer").hidden = false; $("drawerOv").hidden = false; refreshLibrary(); }
 function closeDrawer() { $("drawer").hidden = true; $("drawerOv").hidden = true; }
 $("menuBtn").addEventListener("click", openDrawer);
 $("drawerClose").addEventListener("click", closeDrawer);
 $("drawerOv").addEventListener("click", closeDrawer);
 
-// ── יצירת קורס חדש (קלט inline) ──
+// ── create new course (inline input) ──
 $("newCourseBtn").addEventListener("click", async () => {
   const inp = $("newCourseIn");
   if (inp.hidden) { inp.hidden = false; inp.focus(); return; }
@@ -770,6 +1023,16 @@ $("newCourseBtn").addEventListener("click", async () => {
 $("newCourseIn").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $("newCourseBtn").click();
   if (e.key === "Escape") { $("newCourseIn").value = ""; $("newCourseIn").hidden = true; }
+});
+
+// ── player keyboard shortcuts (Space · ← · →) ──
+document.addEventListener("keydown", (e) => {
+  if (currentView !== "play") return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "SELECT" || ae.isContentEditable)) return;
+  if (e.key === " ") { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10); }
 });
 
 show("home");

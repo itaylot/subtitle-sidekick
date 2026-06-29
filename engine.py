@@ -1,22 +1,27 @@
-"""engine.py — לוגיקת התמלול + שמירה/ייצוא, מנותקת לחלוטין מה-UI.
+"""engine.py — transcription logic + save/export, fully decoupled from the UI.
 
-faster-whisper + מודל ivrit-ai. זיהוי GPU אוטומטי (NVIDIA → פי כמה מהר).
+faster-whisper + ivrit-ai model. Automatic GPU detection (NVIDIA → significantly faster).
 """
 
 import os
 import re
 import json
 import time
+import shutil
 
-MODEL_ACCURATE = "ivrit-ai/whisper-large-v3-turbo-ct2"  # מדויק לעברית
-MODEL_FAST = "small"                                    # מהיר, פחות מדויק
-VIDEO_EXT = (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".mp3", ".m4a", ".wav", ".flac", ".ogg")
+MODEL_ACCURATE = "ivrit-ai/whisper-large-v3-turbo-ct2"  # Hebrew-specialized model
+MODEL_FAST = "small"                                    # faster, less accurate
+MAX_CUE_WORDS = 6  # max words per subtitle cue — improves on-screen readability
 
 CPU_THREADS = max(4, os.cpu_count() or 4)
 
 _model = None
 _model_name = None
 _device = "cpu"
+
+# Cancel is handled by killing the worker process (see worker.py / app.py) — faster-whisper's
+# C-level work can't be interrupted from within the same process. Pause is cooperative via a
+# pause_check callback that blocks between segments.
 
 
 def fmt_time(t: float) -> str:
@@ -25,20 +30,9 @@ def fmt_time(t: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-def human(sec: float) -> str:
-    sec = max(0, int(sec))
-    m, s = divmod(sec, 60)
-    if m >= 60:
-        h, m = divmod(m, 60)
-        return f"{h}:{m:02d} שעות"
-    if m:
-        return f"{m}:{s:02d} דקות"
-    return f"{s} שניות"
-
-
-# ── זיהוי חומרה ──
+# ── hardware detection ──
 def _resolve_device():
-    """מחזיר (device, compute_type). אם יש GPU של NVIDIA — משתמשים בו."""
+    """Returns (device, compute_type). Uses NVIDIA GPU if available."""
     try:
         import ctranslate2
         if ctranslate2.get_cuda_device_count() > 0:
@@ -49,7 +43,7 @@ def _resolve_device():
 
 
 def _load_model(name):
-    """טוען מודל; מנסה GPU ואם נכשל נופל ל-CPU."""
+    """Load model; tries GPU first, falls back to CPU on failure."""
     from faster_whisper import WhisperModel
     dev, ct = _resolve_device()
     try:
@@ -68,14 +62,14 @@ def write_srt(srt_path, cues):
 
 
 def save_srt(video, cues):
-    """שומר מחדש SRT + נגן אחרי עריכה."""
+    """Re-save SRT + viewer after editing."""
     srt = os.path.splitext(video)[0] + ".srt"
     write_srt(srt, cues)
     make_viewer(video, cues)
     return srt
 
 
-# ── ייצוא תמליל ──
+# ── transcript export ──
 def export_txt(video, cues):
     out = os.path.splitext(video)[0] + " — תמליל.txt"
     with open(out, "w", encoding="utf-8") as f:
@@ -86,7 +80,6 @@ def export_txt(video, cues):
 def export_docx(video, cues):
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
 
     def set_rtl(p):
@@ -106,7 +99,7 @@ def export_docx(video, cues):
     return out
 
 
-# נגן עצמאי (בונוס). כתוביות native דרך <track> VTT — מופיעות גם במסך מלא.
+# standalone viewer. Native subtitles via <track> VTT — visible in fullscreen too.
 VIEWER_TEMPLATE = """<!DOCTYPE html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8"><title>__TITLE__</title>
 <style>
@@ -144,13 +137,13 @@ def make_viewer(video, cues):
     return out
 
 
-# ── ספריית הרצאות (Library): קורסים + הרצאות שתמללנו, נשמר ב-JSON ──
+# ── lecture library: courses + transcribed lectures, stored as JSON ──
 LIB_DIR = os.path.join(os.path.expanduser("~"), "Videos", "Subtitle Sidekick")
 LIB_PATH = os.path.join(LIB_DIR, "library.json")
 
 
 def load_library():
-    """מחזיר {courses: [...], lectures: [...]} (נוצר ריק אם אין)."""
+    """Returns {courses: [...], lectures: [...]} (creates empty if missing)."""
     try:
         with open(LIB_PATH, encoding="utf-8") as f:
             data = json.load(f)
@@ -158,7 +151,7 @@ def load_library():
         data = {}
     data.setdefault("courses", [])
     data.setdefault("lectures", [])
-    # מסנן הרצאות שהקובץ שלהן כבר לא קיים
+    # filter out lectures whose file no longer exists on disk
     data["lectures"] = [l for l in data["lectures"] if os.path.exists(l.get("video", ""))]
     return data
 
@@ -170,30 +163,31 @@ def save_library(data):
     return data
 
 
-# ── הגדרות משתמש (מצב תמלול + קונפיג שרת Cloud אישי) — נשמר ב-JSON מקומי ──
+# ── user settings (transcription mode + personal cloud server config) — stored as local JSON ──
 SETTINGS_PATH = os.path.join(LIB_DIR, "settings.json")
 
 
 def load_settings():
-    """מחזיר את ההגדרות עם כל ברירות-המחדל מולאות (מצב תמלול + קונפיג ומונה-עלות לשרת)."""
+    """Returns settings with all defaults filled in (transcription mode + cloud config and cost counter)."""
     try:
         with open(SETTINGS_PATH, encoding="utf-8") as f:
             data = json.load(f)
     except Exception:
         data = {}
     data.setdefault("transcription_mode", "local_accurate")
+    data.setdefault("library_dir", LIB_DIR)  # base folder where course folders + lectures are stored
     data.setdefault("cloud", {})
     c = data["cloud"]
     c.setdefault("endpoint_url", "")
     c.setdefault("api_key", "")
-    c.setdefault("price_per_hour", 0)        # מחיר ה-GPU לשעה ($) — לחישוב עלות
-    c.setdefault("total_seconds", 0)         # זמן עיבוד מצטבר בשרת
-    c.setdefault("total_cost", 0)            # עלות מצטברת ($)
+    c.setdefault("price_per_hour", 0)        # GPU price per hour ($) — for cost calculation
+    c.setdefault("total_seconds", 0)         # cumulative processing time on server
+    c.setdefault("total_cost", 0)            # cumulative cost ($)
     return data
 
 
 def save_settings(update):
-    """ממזג עדכון חלקי לתוך ההגדרות הקיימות (לא דורס) ושומר. מחזיר את ההגדרות המלאות."""
+    """Merges a partial update into existing settings (non-destructive) and saves. Returns full settings."""
     data = load_settings()
     for k, v in (update or {}).items():
         if k == "cloud" and isinstance(v, dict):
@@ -207,16 +201,111 @@ def save_settings(update):
 
 
 def add_cloud_usage(seconds):
-    """מצבר זמן עיבוד בשרת לעלות מצטברת (לפי המחיר-לשעה שהוגדר). מחזיר את ההגדרות המעודכנות."""
-    data = load_settings()
+    """Accumulates server processing time into cumulative cost (based on configured price per hour)."""
     seconds = max(0, float(seconds or 0))
-    rate = float(data["cloud"].get("price_per_hour") or 0)
-    data["cloud"]["total_seconds"] = (float(data["cloud"].get("total_seconds") or 0) + seconds)
-    data["cloud"]["total_cost"] = (float(data["cloud"].get("total_cost") or 0) + seconds / 3600.0 * rate)
-    return save_settings({"cloud": {
-        "total_seconds": data["cloud"]["total_seconds"],
-        "total_cost": data["cloud"]["total_cost"],
-    }})
+    data = load_settings()
+    cloud = data["cloud"]
+    cloud["total_seconds"] = float(cloud.get("total_seconds") or 0) + seconds
+    cloud["total_cost"] = float(cloud.get("total_cost") or 0) + seconds / 3600.0 * float(cloud.get("price_per_hour") or 0)
+    os.makedirs(LIB_DIR, exist_ok=True)
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
+
+
+# ── transcription queue: persisted jobs so the queue survives app restarts/crashes ──
+QUEUE_PATH = os.path.join(LIB_DIR, "queue.json")
+
+
+def library_dir():
+    """User-chosen base folder for storing lectures (defaults to LIB_DIR)."""
+    return load_settings().get("library_dir") or LIB_DIR
+
+
+def _safe_folder(name):
+    """Sanitize a course name into a valid Windows folder name."""
+    return re.sub(r'[<>:"/\\|?*]', "_", (name or "").strip())
+
+
+def _unique_path(path):
+    """If path exists, return 'base (1).ext', 'base (2).ext'… so we never overwrite."""
+    if not os.path.exists(path):
+        return path
+    base, ext = os.path.splitext(path)
+    i = 1
+    while os.path.exists(f"{base} ({i}){ext}"):
+        i += 1
+    return f"{base} ({i}){ext}"
+
+
+def relocate(res, course):
+    """Move a finished lecture's video into <library>/<course>/ and regenerate srt+viewer there.
+
+    Returns res with updated paths. Empty course → unchanged (stays next to source).
+    The viewer HTML embeds the video basename, so we regenerate srt+viewer from cues at the
+    destination rather than moving stale copies. Raises on failure (caller marks the job failed).
+    """
+    folder = _safe_folder(course)
+    if not folder:
+        return res
+    dest_dir = os.path.join(library_dir(), folder)
+    os.makedirs(dest_dir, exist_ok=True)
+    old_video, old_srt, old_viewer = res["video"], res.get("srt"), res.get("viewer")
+
+    new_video = _unique_path(os.path.join(dest_dir, os.path.basename(old_video)))
+    shutil.move(old_video, new_video)              # rename on same drive, copy across drives
+    new_srt = os.path.splitext(new_video)[0] + ".srt"
+    write_srt(new_srt, res["cues"])
+    new_viewer = make_viewer(new_video, res["cues"])
+
+    for p in (old_srt, old_viewer):                # drop now-stale in-place outputs
+        if p and os.path.exists(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+    res = dict(res)
+    res["video"], res["srt"], res["viewer"] = new_video, new_srt, new_viewer
+    return res
+
+
+def load_queue():
+    """Load the persisted queue for crash recovery. Returns only resumable jobs (status='queued').
+
+    'running' jobs (interrupted mid-transcription) revert to 'queued'; 'done'/'failed' are history
+    and dropped; jobs whose source file vanished are dropped (nothing to run).
+    """
+    try:
+        with open(QUEUE_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return []
+    jobs = data.get("jobs") if isinstance(data, dict) else None
+    if not isinstance(jobs, list):
+        return []
+    out = []
+    for j in jobs:
+        if not isinstance(j, dict) or not j.get("sourcePath"):
+            continue
+        if j.get("status") not in ("queued", "running"):
+            continue
+        if not os.path.exists(j["sourcePath"]):
+            continue
+        j["status"] = "queued"
+        j["error"] = None
+        out.append(j)
+    return out
+
+
+def save_queue(jobs):
+    """Atomically persist the queue (write to .tmp then os.replace) so a crash can't corrupt it."""
+    os.makedirs(LIB_DIR, exist_ok=True)
+    tmp = QUEUE_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"version": 1, "jobs": jobs or []}, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, QUEUE_PATH)
+    return True
 
 
 def create_course(name):
@@ -229,7 +318,7 @@ def create_course(name):
 
 
 def remove_course(name):
-    """מסיר קורס; הרצאותיו עוברות ל'ללא קורס' (הקבצים לא נמחקים)."""
+    """Remove a course; its lectures move to 'no course' (files are not deleted)."""
     data = load_library()
     data["courses"] = [c for c in data["courses"] if c != name]
     for l in data["lectures"]:
@@ -239,7 +328,7 @@ def remove_course(name):
 
 
 def add_lecture(video, srt=None, course="", title=None):
-    """רושם הרצאה ב-library (מחליף רשומה קיימת לאותו קובץ). מחזיר את ה-library."""
+    """Register a lecture in the library (replaces existing entry for the same file). Returns the library."""
     video = os.path.abspath(video)
     srt = srt or (os.path.splitext(video)[0] + ".srt")
     title = title or os.path.splitext(os.path.basename(video))[0]
@@ -273,7 +362,7 @@ def set_lecture_course(video, course):
 
 
 def rename_lecture(video, title):
-    """משנה את שם התצוגה ב-library (לא נוגע בקובץ עצמו בדיסק — בטוח גם בזמן ניגון)."""
+    """Change display name in the library (does not touch the file on disk — safe during playback)."""
     video = os.path.abspath(video)
     title = (title or "").strip()
     if not title:
@@ -286,7 +375,7 @@ def rename_lecture(video, title):
 
 
 def viewer_path(video):
-    """נתיב נגן-ה-HTML העצמאי של ההרצאה (נוצר בזמן התמלול)."""
+    """Path to the lecture's standalone HTML player (created at transcription time)."""
     folder = os.path.dirname(video)
     base = os.path.splitext(os.path.basename(video))[0]
     return os.path.join(folder, base + " — כתוביות.html")
@@ -299,7 +388,7 @@ def _parse_ts(s):
 
 
 def parse_srt(srt):
-    """קורא קובץ SRT חזרה לרשימת cues (לפתיחת הרצאה מההיסטוריה בנגן)."""
+    """Read an SRT file back into a list of cues (for opening a saved lecture in the player)."""
     cues = []
     try:
         with open(srt, encoding="utf-8") as f:
@@ -323,7 +412,7 @@ def parse_srt(srt):
 
 
 def open_lecture(video):
-    """מחזיר {video, cues, srt} להרצאה שמורה — קורא את ה-SRT מהדיסק. מסמן כ'נצפתה'."""
+    """Returns {video, cues, srt} for a saved lecture — reads SRT from disk. Marks as viewed."""
     video = os.path.abspath(video)
     data = load_library()
     lec = next((l for l in data["lectures"] if l.get("video") == video), None)
@@ -334,19 +423,40 @@ def open_lecture(video):
     return {"video": video, "cues": parse_srt(srt), "srt": srt}
 
 
-def download(url, on_progress=None, browser="chrome"):
-    """מוריד וידאו מקישור (yt-dlp). מחזיר נתיב הקובץ שירד.
+def search_library(query):
+    """Search text across all SRTs in the library. Returns [{video, title, course, hits:[cue,…]}, …]."""
+    query = (query or "").strip().lower()
+    if not query:
+        return []
+    data = load_library()
+    results = []
+    for lec in data["lectures"]:
+        cues = parse_srt(lec.get("srt") or "")
+        hits = [c for c in cues if query in c["text"].lower()]
+        if hits:
+            results.append({
+                "video": lec["video"],
+                "title": lec.get("title") or os.path.splitext(os.path.basename(lec["video"]))[0],
+                "course": lec.get("course") or "",
+                "hits": hits,
+            })
+    return results
 
-    מנסה קודם עם cookies של הדפדפן (ל-Moodle מאחורי התחברות); אם נכשל —
-    מוריד בלי cookies (לקישורים ציבוריים כמו YouTube).
+
+def download(url, on_progress=None):
+    """Download a video from a URL (yt-dlp). Returns the path of the downloaded file.
+
+    Tries with browser cookies first (for Moodle behind login); falls back to
+    no cookies for public URLs (YouTube etc.).
     """
     from yt_dlp import YoutubeDL
 
     outdir = os.path.join(os.path.expanduser("~"), "Videos", "Subtitle Sidekick")
     os.makedirs(outdir, exist_ok=True)
-    holder = {"path": None}
+    dl_path = None
 
     def hook(d):
+        nonlocal dl_path
         if d.get("status") == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             done = d.get("downloaded_bytes") or 0
@@ -354,13 +464,13 @@ def download(url, on_progress=None, browser="chrome"):
             if on_progress:
                 on_progress({"percent": pct, "status": "downloading"})
         elif d.get("status") == "finished":
-            holder["path"] = d.get("filename")
+            dl_path = d.get("filename")
             if on_progress:
                 on_progress({"percent": 100, "status": "finished"})
 
     base_opts = {
         "outtmpl": os.path.join(outdir, "%(title).80s.%(ext)s"),
-        "format": "best",          # קובץ יחיד (וידאו+אודיו) — בלי צורך ב-ffmpeg למיזוג
+        "format": "best",          # single file (video+audio) — no ffmpeg merge needed
         "progress_hooks": [hook],
         "noplaylist": True,
         "quiet": True,
@@ -369,34 +479,34 @@ def download(url, on_progress=None, browser="chrome"):
 
     def run(with_cookies):
         opts = dict(base_opts)
-        if with_cookies and browser:
-            opts["cookiesfrombrowser"] = (browser,)
+        if with_cookies:
+            opts["cookiesfrombrowser"] = ("chrome",)
         with YoutubeDL(opts) as ydl:
             ydl.extract_info(url, download=True)
 
-    # 1) ניסיון עם cookies (ל-Moodle מאחורי התחברות)
+    # 1) try with cookies (for Moodle behind login)
     cookie_err = None
     try:
         run(True)
-        return holder["path"]
+        return dl_path
     except Exception as e:  # noqa: BLE001
         cookie_err = str(e)
-        holder["path"] = None
+        dl_path = None
 
-    # 2) נפילה לבלי-cookies (לקישורים ציבוריים כמו YouTube)
+    # 2) fall back to no cookies (for public URLs like YouTube)
     try:
         run(False)
-        return holder["path"]
+        return dl_path
     except Exception as e2:  # noqa: BLE001
         msg = str(e2)
         low = msg.lower()
-        # (א) הקישור אינו וידאו ישיר — דף נגן (Moodle/אתר) שאין ממנו מה לחלץ
+        # (a) URL is a player page (e.g. Moodle video page), not a direct video — nothing to extract
         if "unsupported url" in low or "no video" in low or "unable to extract" in low:
             raise RuntimeError(
                 "הקישור הזה הוא דף נגן (למשל דף וידאו של Moodle), לא קובץ וידאו ישיר — "
                 "אי אפשר להוריד אותו אוטומטית. הורד את הסרטון ידנית וגרור את הקובץ לכאן, "
                 "או מצא את כתובת הווידאו הישירה (mp4/m3u8) והדבק אותה.")
-        # (ב) בעיית קריאת cookies (כרום פתוח/נעול) — להתחברות מאחורי Moodle
+        # (b) cookie read error (Chrome open/locked) — needed for Moodle login
         if "could not copy" in cookie_err.lower() or "cookie" in cookie_err.lower():
             raise RuntimeError(
                 "ל-Moodle צריך להתחבר בכרום ואז לסגור אותו לגמרי (כדי שאפשר יהיה לקרוא את "
@@ -404,11 +514,24 @@ def download(url, on_progress=None, browser="chrome"):
         raise RuntimeError(msg)
 
 
-def transcribe(video_path, fast=False, on_progress=None, cloud=None):
-    """מתמלל קובץ → SRT + cues. on_progress(dict) נקרא לאורך הדרך.
+def _split_words(words):
+    """Split a segment's words into short cues of MAX_CUE_WORDS, with word-level timing."""
+    out = []
+    for i in range(0, len(words), MAX_CUE_WORDS):
+        chunk = words[i:i + MAX_CUE_WORDS]
+        text = " ".join(w.word.strip() for w in chunk).strip()
+        if text:
+            out.append({"start": round(chunk[0].start, 3), "end": round(chunk[-1].end, 3), "text": text})
+    return out
 
-    cloud={"endpoint_url":..., "api_key":...} מנתב לתמלול בשרת חיצוני (cloud_backend)
-    במקום למודל המקומי. שאר האפליקציה מקבלת תמיד את אותו מבנה תוצאה.
+
+def transcribe(video_path, fast=False, on_progress=None, cloud=None, pause_check=None):
+    """Transcribe a file → SRT + cues. on_progress(dict) is called throughout.
+
+    cloud={"endpoint_url":..., "api_key":...} routes to an external server (cloud_backend)
+    instead of the local model. The rest of the app always receives the same result structure.
+    pause_check(): optional callable invoked each segment; it may block while paused and
+    should return the number of seconds it blocked (for ETA accounting).
     """
     if cloud:
         import cloud_backend
@@ -431,7 +554,9 @@ def transcribe(video_path, fast=False, on_progress=None, cloud=None):
 
     emit(stage="transcribe", percent=0, eta=None, elapsed=0)
     segments, info = _model.transcribe(
-        video_path, language="he", vad_filter=True, beam_size=1,
+        video_path, language="he", vad_filter=True,
+        beam_size=1 if fast else 5,
+        word_timestamps=True,
         vad_parameters={"min_silence_duration_ms": 500})
     dur = getattr(info, "duration", 0) or 0
 
@@ -439,22 +564,24 @@ def transcribe(video_path, fast=False, on_progress=None, cloud=None):
     srt = base + ".srt"
     cues = []
     t0 = time.time()
-    with open(srt, "w", encoding="utf-8") as fh:
-        n = 0
-        for seg in segments:
-            txt = seg.text.strip()
-            if not txt:
-                continue
-            n += 1
-            fh.write(f"{n}\n{fmt_time(seg.start)} --> {fmt_time(seg.end)}\n{txt}\n\n")
-            cues.append({"start": round(seg.start, 3), "end": round(seg.end, 3), "text": txt})
-            if dur:
-                elapsed = time.time() - t0
-                rate = seg.end / elapsed if elapsed > 0 else 0
-                eta = (dur - seg.end) / rate if rate > 0 else 0
-                emit(stage="transcribe", percent=min(99, int(seg.end / dur * 100)),
-                     eta=eta, elapsed=elapsed, line=txt)
+    paused_for = 0.0
+    for seg in segments:
+        if pause_check:                  # cooperative pause — blocks here while paused
+            paused_for += pause_check() or 0.0
+        words = getattr(seg, "words", None) or []
+        sub = _split_words(words) if words else (
+            [{"start": round(seg.start, 3), "end": round(seg.end, 3), "text": seg.text.strip()}]
+            if seg.text.strip() else []
+        )
+        cues.extend(sub)
+        if sub and dur:
+            elapsed = time.time() - t0 - paused_for
+            rate = seg.end / elapsed if elapsed > 0 else 0
+            eta = (dur - seg.end) / rate if rate > 0 else 0
+            emit(stage="transcribe", percent=min(99, int(seg.end / dur * 100)),
+                 eta=eta, elapsed=elapsed, line=sub[-1]["text"])
 
-    emit(stage="sync", percent=99, eta=0, elapsed=time.time() - t0)
+    write_srt(srt, cues)
+    emit(stage="sync", percent=99, eta=0, elapsed=time.time() - t0 - paused_for)
     viewer = make_viewer(video_path, cues)
-    return {"srt": srt, "cues": cues, "viewer": viewer, "count": n, "video": video_path}
+    return {"srt": srt, "cues": cues, "viewer": viewer, "count": len(cues), "video": video_path}

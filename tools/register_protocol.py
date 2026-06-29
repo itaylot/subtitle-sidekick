@@ -1,8 +1,8 @@
-"""register_protocol.py — רושם פרוטוקול מותאם subsidekick:// ב-Windows.
+"""register_protocol.py — registers the custom subsidekick:// protocol on Windows.
 
-לאחר הרישום (חד-פעמי), לינק/סימנייה ל-subsidekick://open בכרום (או כל דפדפן)
-יפתח את Subtitle Sidekick — בלי תוסף, בלי native messaging.
-נקרא ע"י run.bat בהתקנה הראשונה, לצד יצירת קיצור הדרך בשולחן העבודה.
+After registration (one-time), a link/bookmark to subsidekick://open in Chrome (or any browser)
+opens Subtitle Sidekick — no extension, no native messaging needed.
+Called by run.bat on first install, alongside desktop shortcut creation.
 """
 
 import os
@@ -31,4 +31,4 @@ if __name__ == "__main__":
         print(f"registered {SCHEME}:// protocol -> {APP}")
     except Exception as e:  # noqa: BLE001
         print("protocol registration skipped:", e)
-        sys.exit(0)  # לא קריטי — לא עוצרים את ההתקנה בגלל זה
+        sys.exit(0)  # non-critical — don't abort install over this

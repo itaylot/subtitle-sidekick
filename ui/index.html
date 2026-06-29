@@ -8,10 +8,10 @@
 </head>
 <body class="theme-light">
   <div class="win">
-    <!-- סרגל כותרת -->
+    <!-- title bar -->
     <div class="bar">
       <button class="menubtn" id="menuBtn" title="הקורסים שלי">☰</button>
-      <button class="homebtn" id="homeBtn" title="מסך הבית">🏠</button>
+      <button class="homebtn" id="homeBtn" title="מסך הבית"><img class="homeic" src="icons/home.png" alt="" /></button>
       <img class="appic" src="icons/app.png" alt="" />
       <div class="appname">Subtitle Sidekick</div>
       <button class="jobpill" id="jobPill" hidden>⏳ <span id="jobPct">0%</span></button>
@@ -25,9 +25,14 @@
     </div>
 
     <div class="body">
-      <!-- ── מסך הבית: סטטיסטיקה + טיפ + פעולות מהירות ── -->
+      <!-- home screen: stats + tip + quick actions -->
       <section class="view" id="view-home">
         <div class="kicker">ברוכים הבאים</div>
+
+        <div class="search-row">
+          <input class="search-in" id="searchIn" placeholder="🔎 חיפוש בכל ההרצאות…" />
+        </div>
+        <div class="search-results" id="searchResults" hidden></div>
 
         <div class="stats-grid" id="statsGrid"></div>
 
@@ -55,7 +60,7 @@
         </div>
       </section>
 
-      <!-- ── מסך 1: פתיחה / גרירה ── -->
+      <!-- screen 1: open / drag-and-drop -->
       <section class="view" id="view-open" hidden>
         <div class="kicker">בחירת קובץ</div>
         <div class="drop2" id="drop">
@@ -91,7 +96,7 @@
         </div>
       </section>
 
-      <!-- ── מסך 2: עיבוד / התקדמות ── -->
+      <!-- screen 2: processing / progress -->
       <section class="view" id="view-proc" hidden>
         <div class="kicker">יצירת כתוביות</div>
         <div class="filechip"><span class="fcic">🎞</span><span id="procName"></span></div>
@@ -106,12 +111,16 @@
           <div class="step" id="step-transcribe">תמלול</div>
           <div class="step" id="step-sync">סנכרון</div>
         </div>
+        <div class="jobctrl" id="jobCtrl" hidden>
+          <button class="jobbtn" id="pauseBtn">⏸ השהה</button>
+          <button class="jobbtn jobbtn-cancel" id="cancelBtn">✕ בטל</button>
+        </div>
         <button class="watchdone" id="watchDone" hidden>▶ הפעל את הכתוביות</button>
         <div class="queue" id="queue"></div>
         <button class="newlec" id="newLec">＋ הרצאה חדשה</button>
       </section>
 
-      <!-- ── מסך 3: נגן ── -->
+      <!-- screen 3: player -->
       <section class="view" id="view-play" hidden>
         <div class="play-head">
           <button class="kebab" id="backBtn" title="חזרה">→</button>
@@ -142,7 +151,7 @@
           </div>
         </div>
 
-        <!-- פאנל תמליל: חיפוש · עריכה · ייצוא -->
+        <!-- transcript panel: search · edit · export -->
         <div class="transcript" id="transcript">
           <div class="tc-head">
             <input class="tc-search" id="tcSearch" placeholder="🔎 חיפוש בכתוביות…" />
@@ -157,7 +166,7 @@
     </div>
   </div>
 
-  <!-- ── תפריט צד: הקורסים שלי ── -->
+  <!-- sidebar: my courses -->
   <div class="drawer-ov" id="drawerOv" hidden></div>
   <aside class="drawer" id="drawer" hidden>
     <div class="drawer-head">
@@ -171,38 +180,65 @@
     <div class="courses" id="coursesList"></div>
   </aside>
 
-  <!-- ── תפריט צד: הגדרות שרת Cloud (אישי, לא משותף) ── -->
+  <!-- sidebar: personal cloud server settings -->
   <div class="drawer-ov" id="settingsOv" hidden></div>
   <aside class="drawer" id="settingsDrawer" hidden>
     <div class="drawer-head">
-      <span class="drawer-title">הגדרות שרת מהיר</span>
+      <span class="drawer-title">הגדרות</span>
       <button class="drawer-x" id="settingsClose" title="סגירה">✕</button>
     </div>
+
+    <div class="settings-section">📁 תיקיית ספרייה</div>
+    <div class="settings-field">
+      <label class="settings-lbl" for="settingsLibDir">כל הקורסים וההרצאות ינוהלו בתוך התיקייה הזו.</label>
+      <div class="folder-row">
+        <input class="newcourse-in" id="settingsLibDir" readonly placeholder="טוען…" />
+        <button class="newcourse-btn folder-pick" id="settingsLibDirBtn">📁 בחירה</button>
+      </div>
+    </div>
+
+    <div class="settings-section">☁ שרת ענן <span class="settings-opt">(אופציונלי)</span></div>
     <div class="settings-hint">
-      כל משתמש מגדיר כאן שרת GPU משלו (לדוגמה חשבון RunPod אישי).
-      אין שרת משותף — הפרטים נשמרים רק במחשב הזה. ראו README להקמת שרת.
+      למצב "שרת GPU" — כל משתמש מגדיר שרת משלו (לדוגמה חשבון RunPod אישי).
+      אין שרת משותף; הפרטים נשמרים רק במחשב הזה. ראו README להקמת שרת.
     </div>
     <div class="settings-field">
       <label class="settings-lbl" for="settingsEndpoint">כתובת השרת (Endpoint URL)</label>
-      <input class="newcourse-in" id="settingsEndpoint" placeholder="https://example-runpod-id.proxy.runpod.net" />
+      <input class="newcourse-in" id="settingsEndpoint" placeholder="https://api.runpod.ai/v2/your-endpoint-id" />
     </div>
     <div class="settings-field">
       <label class="settings-lbl" for="settingsKey">מפתח API</label>
       <input class="newcourse-in" id="settingsKey" type="password" placeholder="••••••••" />
     </div>
     <div class="settings-field">
-      <label class="settings-lbl" for="settingsPrice">מחיר ה-GPU לשעה (דולר) — לחישוב עלות</label>
+      <label class="settings-lbl" for="settingsPrice">מחיר ה-GPU לשעה (דולר) — לחישוב עלות מצטברת</label>
       <input class="newcourse-in" id="settingsPrice" type="number" step="0.01" min="0" placeholder="0.39" />
     </div>
-    <button class="newcourse-btn" id="settingsSaveBtn">שמירה</button>
+    <button class="newcourse-btn" id="settingsSaveBtn">שמירת הגדרות השרת</button>
     <div class="settings-status" id="settingsStatus"></div>
 
+    <div class="settings-section">💰 עלות שימוש בשרת</div>
     <div class="settings-cost" id="settingsCost">
       <div class="cost-line">עלות מצטברת: <strong id="costTotal">$0.00</strong></div>
       <div class="cost-sub" id="costSub"></div>
       <button class="cost-reset" id="costReset">איפוס מונה</button>
     </div>
   </aside>
+
+  <!-- first-run onboarding: explains the three transcription modes -->
+  <div class="onboard-ov" id="onboardOv" hidden>
+    <div class="onboard">
+      <div class="onboard-title">ברוכים הבאים ל-Subtitle Sidekick 👋</div>
+      <div class="onboard-text">תמללו הרצאות מוקלטות לעברית עם כתוביות מסונכרנות. בחרו לכל הרצאה איך לתמלל:</div>
+      <ul class="onboard-modes">
+        <li><span class="om-ic">🔒</span><div><b>מקומי — מדויק</b><span>רץ במחשב שלכם, פרטי לחלוטין. איטי יותר. ברירת מחדל.</span></div></li>
+        <li><span class="om-ic">⚡</span><div><b>מקומי — מהיר</b><span>מהיר יותר על חשבון מעט דיוק.</span></div></li>
+        <li><span class="om-ic">☁</span><div><b>שרת GPU (ענן)</b><span>הכי מהיר. דורש הגדרת שרת אישי; האודיו עולה לשרת שלכם.</span></div></li>
+      </ul>
+      <div class="onboard-tip">💡 אפשר להוסיף כמה הרצאות לתור, לסדר אותן, ולתת להן לרוץ ברקע.</div>
+      <button class="onboard-btn" id="onboardClose">הבנתי, בואו נתחיל</button>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

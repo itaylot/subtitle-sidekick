@@ -15,8 +15,6 @@
 
 > מבוסס Whisper עם מודל עברי ייעודי (ivrit-ai). אומת: מתמלל עברית במדויק, כולל פיסוק.
 
-<p align="center"><img src="docs/screenshot-home.png" width="420" alt="מסך הבית של Subtitle Sidekick" /></p>
-
 ---
 
 ## תוכן עניינים
@@ -27,6 +25,7 @@
 - [אתגרים טכניים שנפתרו](#️-אתגרים-טכניים-שנפתרו)
 - [למתקדמים — שורת פקודה](#למתקדמים--שורת-פקודה)
 - [מבנה הפרויקט](#-מבנה)
+- [מצב "שרת מהיר" (ענן, אופציונלי)](#-מצב-שרת-מהיר-אופציונלי)
 - [פרטיות](#-פרטיות)
 
 ---
@@ -105,6 +104,8 @@ python tools/transcribe_to_srt.py "הרצאה.mp4"        # יוצר הרצאה.
 ```
 app.py                      משגר חלון pywebview + bridge ל-Python
 engine.py                   מנוע התמלול (faster-whisper / ivrit-ai) + ייצוא
+worker.py                   מריץ תמלול מקומי בתהליך נפרד (כדי שניתן לעצור/לבטל)
+cloud_backend.py            תמלול דרך שרת GPU אישי (RunPod) — ראו מצב "שרת מהיר" למטה
 ui/                         ממשק המשתמש (HTML/CSS/JS + פונטים מקומיים)
 run.bat                     משגר (התקנה אוטומטית + אייקון בפעם הראשונה)
 requirements.txt            תלויות
@@ -113,6 +114,9 @@ tools/
   player.html               נגן מקומי לצפייה עם כתוביות
   make_shortcut.py          יוצר את האייקון בשולחן העבודה
   register_protocol.py      רושם subsidekick:// כדי שסימנייה בכרום תפתח את האפליקציה
+runpod_server/               קוד השרת (Docker image) למצב "שרת מהיר" האופציונלי
+  handler.py                פונקציית התמלול שרצה על השרת
+  Dockerfile                בניית ה-image (אופה את המודל העברי בתוכו)
 ```
 
 ## ☁ מצב "שרת מהיר" (אופציונלי)
@@ -120,17 +124,64 @@ tools/
 <details>
 <summary>תמלול דרך שרת GPU שלכם — מהיר יותר, אבל לא חובה (לחצו להרחבה)</summary>
 
-ברירת המחדל היא ותישאר **מקומית** — בלי קונפיג, בלי חשבון. אם תרצו תמלול מהיר יותר מאשר ה-CPU/GPU שלכם, אפשר להפעיל **"☁ שרת מהיר"** במסך ההעלאה ולחבר שרת תמלול אישי משלכם.
+ברירת המחדל היא ותישאר **מקומית** — בלי קונפיג, בלי חשבון. מי שרוצה תמלול מהיר יותר יכול לבחור **"☁ שרת GPU (ענן)"** במסך ההעלאה, אחרי שמקימים שרת אישי ב-RunPod (חד-פעמי, כ-15–20 דקות).
 
-חשוב: **זה לא שרת משותף**. לכל משתמש יש endpoint ו-API key אישיים — אין שום כתובת או מפתח מוטבעים באפליקציה. אם תפיצו את הפרויקט, כל מי שמשתמש בו צריך להקים שרת משלו.
+חשוב: **זה לא שרת משותף**. לכל משתמש endpoint ו-API key אישיים משלו ב-RunPod — אין שום כתובת או מפתח מוטבעים באפליקציה.
 
-**איך מקימים שרת (לדוגמה RunPod):**
-1. פתחו חשבון ב-[RunPod](https://www.runpod.io/) (או Vast.ai / שרת פרטי משלכם).
-2. הריצו עליו שירות HTTP שחושף `POST /transcribe` (multipart: `audio_file`, `language`, `model`, `vad_filter`, `beam_size`) עם כותרת `Authorization: Bearer <token>`, ומחזיר `{"ok": true, "segments": [{"start":..,"end":..,"text":..}, ...]}` או `{"ok": false, "error": "..."}`.
-3. בתוך Subtitle Sidekick: ⚙ **הגדרות שרת** → הדביקו את כתובת השרת ואת ה-API key שלכם → **שמירה**.
-4. בהעלאת הרצאה, סמנו **☁ שרת מהיר**. האודיו (לא הווידאו המלא) יישלח לשרת שהגדרתם.
+### מה צריך מראש (פעם אחת, אם אין כבר)
 
-אם השרת לא מוגדר, לא זמין, או מחזיר שגיאה — תוצג הודעה ברורה, ואפשר לכבות את הטוגל ולהמשיך מקומית בלי לאבד את הקובץ.
+- ☑ חשבון [RunPod](https://www.runpod.io/) עם קרדיט (אפילו $5-10 מספיקים להתחלה).
+- ☑ [Docker Desktop](https://www.docker.com/products/docker-desktop/) מותקן ופתוח.
+- ☑ חשבון חינמי ב-[Docker Hub](https://hub.docker.com/) (להעלאת ה-image).
+
+> ⚠️ **אם תיקיית הפרויקט נמצאת תחת OneDrive** (כמו `...\OneDrive\...`): Docker עלול להיכשל בקריאת קבצים שסונכרנו כ"placeholder בענן" עם שגיאה כמו `invalid file request Dockerfile`. אם זה קורה — העתיקו את תיקיית `runpod_server` למקום מחוץ ל-OneDrive (למשל `C:\runpod_server`) ובנו משם.
+
+### שלב 1 — מפתח API ב-RunPod
+
+1. נכנסים ל-[runpod.io](https://www.runpod.io/) ומתחברים.
+2. תפריט צד → **Settings** → לשונית **API Keys** → **+ Create API Key**.
+3. נותנים שם (לדוגמה `subtitle-sidekick`) → **Create**.
+4. **מעתיקים את המפתח עכשיו** — הוא מוצג פעם אחת בלבד.
+
+### שלב 2 — בניית השרת והעלאתו ל-Docker Hub
+
+בטרמינל (PowerShell/cmd), מתוך תיקיית הפרויקט:
+
+```bash
+cd runpod_server
+docker login
+docker build -t YOUR_DOCKERHUB_USERNAME/subtitle-sidekick-server:latest .
+docker push YOUR_DOCKERHUB_USERNAME/subtitle-sidekick-server:latest
+```
+
+מחליפים את `YOUR_DOCKERHUB_USERNAME` בשם המשתמש שלכם ב-Docker Hub (לדוגמה אם שם המשתמש `dani123` → `dani123/subtitle-sidekick-server:latest`).
+
+- `docker login` מבקש שם משתמש/סיסמה של Docker Hub — חד-פעמי.
+- `docker build` מוריד את המודל העברי (כמה GB) ובונה את ה-image — **לוקח זמן, אפילו 20-30 דקות**, בהתאם למהירות האינטרנט. זה תקין, אפשר להשאיר רץ ברקע.
+- `docker push` מעלה את ה-image המוכן לחשבון שלכם ב-Docker Hub.
+
+### שלב 3 — יצירת ה-Endpoint ב-RunPod
+
+1. ב-RunPod, תפריט צד → **Serverless** → **+ New Endpoint**.
+2. בוחרים **Custom Source**.
+3. בשדה ה-image מדביקים בדיוק את מה שדחפתם בשלב 2: `YOUR_DOCKERHUB_USERNAME/subtitle-sidekick-server:latest`.
+4. **GPU:** בוחרים אופציה זולה שמספיקה (RTX A4000 או A5000) — אין צורך ב-GPU חזק לתמלול.
+5. **Workers:** Min Workers = `0` (כך שלא משלמים כשלא משתמשים), Max Workers = `1` (מספיק לשימוש אישי).
+6. **Create Endpoint**.
+7. בדף ה-endpoint שנפתח, בראש העמוד מופיע **Endpoint ID** (מחרוזת אותיות/ספרות) — מעתיקים אותו.
+
+### שלב 4 — הזנת הפרטים באפליקציה
+
+ב-Subtitle Sidekick: ⚙ **הגדרות** → אזור "שרת ענן":
+- **כתובת השרת:** `https://api.runpod.ai/v2/ENDPOINT_ID` (מחליפים `ENDPOINT_ID` במה שהעתקתם בשלב 3.7)
+- **מפתח API:** המפתח משלב 1.4
+- **שמירת הגדרות השרת**.
+
+זהו — מהפעלה הבאה, בוחרים **☁ שרת GPU (ענן)** מתפריט מצב התמלול בהעלאת הרצאה. ה-API key נשמר במחשב ולא צריך להזין אותו מחדש.
+
+**עלות:** RunPod Serverless מחייב רק על שניות עיבוד בפועל (scale-to-zero — אין חיוב כשהשרת לא בשימוש). העלות המצטברת מוצגת בהגדרות, לפי מחיר לשעה שתזינו.
+
+אם השרת לא מוגדר, לא זמין, או מחזיר שגיאה — תוצג הודעה ברורה, ואפשר לבחור מצב מקומי ולהמשיך בלי לאבד את הקובץ.
 
 </details>
 

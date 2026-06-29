@@ -1,6 +1,6 @@
-"""make_shortcut.py — יוצר קיצור דרך "Subtitle Sidekick" בשולחן העבודה.
+"""make_shortcut.py — creates a "Subtitle Sidekick" desktop shortcut.
 
-נקרא פעם אחת ע"י run.bat אחרי ההתקנה, כדי שלא צריך CMD יותר — רק האייקון.
+Called once by run.bat after installation so the app can be launched from the icon without CMD.
 """
 
 import os

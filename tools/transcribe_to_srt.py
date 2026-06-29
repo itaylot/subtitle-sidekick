@@ -1,41 +1,35 @@
-"""transcribe_to_srt.py — מתמלל קובץ וידאו/אודיו לקובץ כתוביות SRT עברי מסונכרן.
+"""transcribe_to_srt.py — transcribe a video/audio file to a synced Hebrew SRT subtitle file.
 
-זו הגישה ל**הרצאות מוקלטות** (Moodle): מורידים את ההרצאה, מריצים את הכלי פעם אחת,
-ומקבלים קובץ .srt עם חותמות זמן מדויקות. נגן (VLC וכו') טוען אותו אוטומטית
-כשהוא נמצא ליד הסרטון באותו שם — והכתוביות מסונכרנות בול לאודיו.
+Intended for recorded lectures (Moodle etc.): download the lecture, run this once,
+and get a .srt file with accurate timestamps. A player (VLC etc.) loads it automatically
+when the SRT sits next to the video with the same base name.
 
-שימוש:
-  python transcribe_to_srt.py "lecture.mp4"            -> יוצר lecture.srt
-  python transcribe_to_srt.py "lecture.mp4" out.srt    -> שם פלט מותאם
+Usage:
+  python transcribe_to_srt.py "lecture.mp4"            -> creates lecture.srt
+  python transcribe_to_srt.py "lecture.mp4" out.srt    -> custom output name
 
-מודל: ברירת מחדל = המודל העברי המדויק (ivrit-ai). למחשב איטי: MHS_MODEL=small.
-תומך בכל פורמט (mp4/mkv/mp3/m4a/wav...) דרך PyAV — בלי צורך ב-ffmpeg נפרד.
+Model: default = accurate Hebrew model (ivrit-ai). Slow machine: MHS_MODEL=small.
+Supports all formats (mp4/mkv/mp3/m4a/wav...) via PyAV — no separate ffmpeg needed.
 """
 
 import os
 import sys
 
-# עברית תקינה בפלט הקונסולה (Windows)
+# ensure correct Hebrew output in the console on Windows
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from faster_whisper import WhisperModel
+from engine import fmt_time
 
 MODEL = os.environ.get("MHS_MODEL", "ivrit-ai/whisper-large-v3-turbo-ct2")
 DEVICE = os.environ.get("MHS_DEVICE", "cpu")
 COMPUTE = os.environ.get("MHS_COMPUTE", "int8")
 LANG = os.environ.get("MHS_LANG", "he")
-
-
-def fmt_time(t: float) -> str:
-    """שניות -> HH:MM:SS,mmm (פורמט SRT)."""
-    h = int(t // 3600)
-    m = int((t % 3600) // 60)
-    s = int(t % 60)
-    ms = int(round((t - int(t)) * 1000))
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
 def main():
@@ -55,7 +49,7 @@ def main():
     print(f"מתמלל: {src}", flush=True)
     print("(על CPU זה יכול לקחת זמן — רץ פעם אחת ושומר קובץ)\n", flush=True)
 
-    # vad_filter מסנן שתיקות; beam_size=5 לדיוק גבוה (זה offline, אפשר להרשות)
+    # vad_filter removes silences; beam_size=5 for high accuracy (offline, no speed penalty)
     segments, info = model.transcribe(src, language=LANG, vad_filter=True, beam_size=5)
 
     n = 0

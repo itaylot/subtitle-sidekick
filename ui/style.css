@@ -1,6 +1,6 @@
-/* style.css — עיצוב "חם" לאפליקציית כתוביות עברית. נבנה לפי טוקני ה-handoff. RTL. */
+/* style.css — warm design for Hebrew subtitle app. RTL. */
 
-/* ── פונטים מקומיים (offline, בלי CDN) ── */
+/* ── local fonts (offline, no CDN) ── */
 @font-face {
   font-family: "Frank Ruhl Libre";
   src: url("fonts/FrankRuhlLibre.ttf") format("truetype");
@@ -14,7 +14,7 @@
   font-display: swap;
 }
 
-/* ── טוקני צבע ── */
+/* ── color tokens ── */
 :root {
   --bg: #fbf6ee;
   --card: #fffefa;
@@ -24,9 +24,9 @@
   --line: #e9ddc9;
   --screen: #1b1410;
   --board: #efe3d0;
-  --accent: #c56a43;   /* חימר */
-  --c2: #5f9e7a;       /* מרווה */
-  --c3: #c59a3f;       /* זהב */
+  --accent: #c56a43;   /* clay */
+  --c2: #5f9e7a;       /* sage */
+  --c3: #c59a3f;       /* gold */
   --dots: rgba(140, 95, 55, 0.14);
   --win-shadow: 0 14px 40px rgba(90, 55, 25, 0.18);
   --drop-inset: inset 0 1px 0 rgba(255, 255, 255, 0.55);
@@ -50,13 +50,13 @@ body.dark {
 * { box-sizing: border-box; }
 
 html, body { height: 100%; }
-html { overflow: hidden; }  /* הגלילה קורית בתוך הכרטיס (.body), לא על כל החלון */
+html { overflow: hidden; }  /* scrolling happens inside the card (.body), not the full window */
 body {
   margin: 0;
   direction: rtl;
   font-family: "Rubik", system-ui, Arial, sans-serif;
   color: var(--text);
-  /* ה-board = רקע חלון האפליקציה, עם רקע נקודות */
+  /* board = app window background with dot pattern */
   background-color: var(--board);
   background-image: radial-gradient(var(--dots) 1.5px, transparent 1.5px);
   background-size: 21px 21px;
@@ -68,7 +68,7 @@ body {
 }
 @media (max-height: 700px) { body { padding: 14px; } }
 
-/* ── חלון האפליקציה (כרטיס) — מוגבל לגובה המסך, התוכן הפנימי גולל אם צריך ── */
+/* ── app window (card) — capped to screen height, inner content scrolls if needed ── */
 .win {
   width: 100%;
   max-width: 600px;
@@ -82,7 +82,7 @@ body {
   box-shadow: var(--win-shadow);
 }
 
-/* ── סרגל כותרת ── */
+/* ── title bar ── */
 .bar {
   height: 48px;
   display: flex;
@@ -94,17 +94,21 @@ body {
 }
 .menubtn {
   background: none; border: none; cursor: pointer;
-  color: var(--text); font-size: 18px; padding: 2px 4px; line-height: 1; flex: none;
+  color: var(--text); font-size: 20px; padding: 2px 4px; line-height: 1; flex: none;
+  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
 }
 .menubtn:hover { color: var(--accent); }
 .homebtn {
   background: none; border: none; cursor: pointer;
-  color: var(--text); font-size: 15px; padding: 2px 4px; line-height: 1; flex: none;
+  color: var(--text); padding: 2px 4px; line-height: 1; flex: none;
 }
 .homebtn:hover { color: var(--accent); }
+.homeic { width: 20px; height: 20px; display: block; opacity: 0.85; }
+.homebtn:hover .homeic { opacity: 1; }
+.dark .homeic { filter: invert(1); }
 .appic {
-  width: 26px; height: 26px;
-  border-radius: 9px;
+  width: 20px; height: 20px;
+  border-radius: 7px;
   object-fit: cover; flex: none;
 }
 .appname { font-size: 13.5px; font-weight: 600; }
@@ -124,14 +128,14 @@ body {
 .barx { display: flex; gap: 7px; }
 .barx span { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; }
 .barx span:hover { filter: brightness(1.1); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06); }
-.d1 { background: #e0533f; }  /* סגירה */
-.d2 { background: #d9a441; }  /* מזעור */
-.d3 { background: #5f9e7a; }  /* מסך מלא */
+.d1 { background: #e0533f; }  /* close */
+.d2 { background: #d9a441; }  /* minimize */
+.d3 { background: #5f9e7a; }  /* fullscreen */
 
-/* ── סרגל הכותרת לא נגלל; הגוף גולל בתוך הכרטיס אם התוכן גבוה מהחלון ── */
+/* title bar doesn't scroll; body scrolls inside the card */
 .bar { flex: none; }
 
-/* ── גוף ── */
+/* ── body ── */
 .body {
   padding: 28px 26px;
   flex: 1;
@@ -147,7 +151,7 @@ body {
 }
 .view[hidden] { display: none; }
 
-/* ── מסך הבית ── */
+/* ── home screen ── */
 .stats-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
   margin-bottom: 18px;
@@ -186,7 +190,32 @@ body {
   font-size: 15px; color: var(--accent);
 }
 
-/* ── מסך 1: גרירה ── */
+/* ── global search (home screen) ── */
+.search-row { margin-bottom: 14px; }
+.search-in {
+  width: 100%; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 10px 16px; font-family: inherit; font-size: 14px; direction: rtl;
+}
+.search-in:focus { outline: none; border-color: var(--accent); }
+.search-in::placeholder { color: var(--muted); }
+.search-results {
+  margin-bottom: 16px; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--card); overflow: hidden;
+}
+.search-results[hidden] { display: none; }
+.sr-hit {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 14px; border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.sr-hit:last-child { border-bottom: none; }
+.sr-hit:hover { background: var(--panel); }
+.sr-time { flex: none; color: var(--accent); font-size: 12px; font-weight: 600; min-width: 44px; padding-top: 2px; }
+.sr-body { flex: 1; min-width: 0; }
+.sr-title { font-size: 11px; color: var(--muted); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-text { font-size: 13.5px; line-height: 1.4; }
+.sr-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* ── screen 1: drag-and-drop ── */
 .drop2 {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -244,14 +273,23 @@ body {
 }
 .settingsLink:hover { color: var(--text); }
 
-/* ── בורר מצב תמלול ── */
+/* ── transcription mode selector ── */
 .moderow { display: flex; align-items: center; gap: 9px; margin-top: 22px; }
 .modelbl { font-size: 13px; color: var(--muted); flex: none; }
 
-/* ── מגירת הגדרות שרת Cloud ── */
+/* ── cloud server settings drawer ── */
 .settings-hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 16px; }
 .settings-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .settings-lbl { font-size: 12.5px; color: var(--muted); }
+.settings-section {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  margin: 18px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+.settings-section:first-child { margin-top: 4px; }
+.settings-opt { font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.folder-row { display: flex; gap: 8px; }
+.folder-row .newcourse-in { flex: 1; }
+.folder-row .folder-pick { flex: none; white-space: nowrap; }
 .settings-status { font-size: 12px; color: var(--c2); margin-top: 10px; min-height: 16px; }
 .settings-cost {
   margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line);
@@ -267,7 +305,7 @@ body {
 }
 .cost-reset:hover { color: var(--text); border-color: var(--muted); }
 
-/* ── בורר קורס במסך הפתיחה ── */
+/* ── course selector on the open screen ── */
 .courserow { display: flex; align-items: center; gap: 9px; margin-top: 16px; }
 .courselbl { font-size: 13px; color: var(--muted); flex: none; }
 .coursesel {
@@ -277,7 +315,7 @@ body {
 }
 .coursesel:focus { outline: none; border-color: var(--accent); }
 
-/* ── תפריט צד: הקורסים שלי ── */
+/* ── sidebar: my courses ── */
 .drawer-ov {
   position: fixed; inset: 0; z-index: 40;
   background: rgba(40, 25, 12, 0.38);
@@ -336,7 +374,7 @@ body {
 .lec-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .courses-empty { font-size: 12.5px; color: var(--muted); text-align: center; padding: 24px 8px; }
 
-/* ── כפתור "⋯" (קביעב) — בשורת הרצאה ובמסך הנגן ── */
+/* ── ⋯ kebab button — in lecture rows and player screen ── */
 .kebab {
   flex: none; width: 28px; height: 28px; padding: 0;
   background: none; border: none; color: var(--muted);
@@ -345,7 +383,7 @@ body {
 }
 .kebab:hover { background: var(--panel); color: var(--text); }
 
-/* ── תפריט פעולות צף (שינוי שם / קורס / דפדפן / הסרה) ── */
+/* ── floating action menu (rename / course / browser / remove) ── */
 .actionmenu {
   position: fixed; z-index: 60; min-width: 168px;
   background: var(--card); border: 1px solid var(--line); border-radius: 12px;
@@ -365,7 +403,7 @@ body {
   border-radius: 7px; padding: 5px 8px; font-family: inherit; font-size: 12.5px; direction: rtl;
 }
 
-/* ── שדה הורדה מקישור ── */
+/* ── URL download field ── */
 .urlrow { display: flex; gap: 8px; margin-top: 14px; }
 .urlin {
   flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
@@ -380,7 +418,7 @@ body {
 .urlbtn:hover { filter: brightness(1.05); }
 .urlhint { font-size: 11px; color: var(--muted); margin-top: 7px; text-align: center; }
 
-/* ── מסך 2: עיבוד ── */
+/* ── screen 2: processing ── */
 .filechip {
   display: inline-flex; align-items: center; gap: 9px;
   background: var(--panel); border: 1px solid var(--line);
@@ -416,7 +454,7 @@ body {
 .step.done { color: var(--c2); border-color: var(--c2); }
 .step.now { color: #fff; background: var(--accent); border-color: transparent; font-weight: 600; }
 
-/* ── כפתור "הפעל כתוביות" בסיום ── */
+/* ── "play subtitles" button shown on completion ── */
 .watchdone {
   margin-top: 22px; width: 100%;
   background: var(--accent); color: #fff; border: none;
@@ -427,7 +465,18 @@ body {
 .watchdone[hidden] { display: none; }
 .watchdone:hover { filter: brightness(1.05); }
 
-/* ── כפתור "הרצאה חדשה" ── */
+/* ── pause / cancel controls during transcription ── */
+.jobctrl { margin-top: 18px; display: flex; gap: 10px; }
+.jobctrl[hidden] { display: none; }
+.jobbtn {
+  flex: 1; background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 999px; padding: 10px 18px;
+  font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.jobbtn:hover { border-color: var(--accent); color: var(--accent); }
+.jobbtn-cancel:hover { border-color: #c0533e; color: #c0533e; }
+
+/* ── "new lecture" button ── */
 .newlec {
   margin-top: 14px; width: 100%;
   background: var(--panel); color: var(--text);
@@ -436,26 +485,59 @@ body {
 }
 .newlec:hover { border-color: var(--accent); color: var(--accent); }
 
-/* ── תור תמלולים ── */
+/* ── transcription queue ── */
 .queue { margin-top: 20px; display: flex; flex-direction: column; gap: 7px; }
 .queue:empty { display: none; }
+.queue-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 4px 2px; margin-bottom: 2px;
+}
+.qh-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.qh-sub { font-size: 11.5px; color: var(--muted); }
 .qitem {
   display: flex; align-items: center; gap: 10px;
   background: var(--panel); border: 1px solid var(--line);
   border-radius: 12px; padding: 9px 13px; font-size: 13px;
+  animation: qin 0.18s ease;
 }
+@keyframes qin { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .qitem { animation: none; } }
+.qgrip {
+  flex: none; color: var(--muted); font-size: 12px; letter-spacing: -3px;
+  cursor: grab; user-select: none; opacity: 0.6;
+}
+.qitem.queued:hover .qgrip { opacity: 1; }
 .qicon { flex: none; font-size: 13px; width: 18px; text-align: center; }
-.qitem.proc .qicon { color: var(--accent); }
+.qitem.running .qicon { color: var(--accent); }
 .qitem.done .qicon { color: var(--c2); }
-.qitem.err .qicon { color: #c0533e; }
+.qitem.failed .qicon { color: #c0533e; }
 .qname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qwatch {
   flex: none; background: var(--c2); color: #fff; border: none;
   border-radius: 999px; padding: 5px 13px; font-size: 12px; font-weight: 600;
   cursor: pointer; font-family: inherit;
 }
+.qitem.queued { cursor: grab; }
+.qitem.queued:active { cursor: grabbing; }
+.qitem.dragging { opacity: 0.45; }
+.qitem.drag-over { border-color: var(--accent); box-shadow: 0 -2px 0 var(--accent) inset; }
+.qcourse {
+  flex: none; max-width: 130px; font-family: inherit; font-size: 12px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px;
+  background: var(--bg); color: inherit;
+}
+.qtag {
+  flex: none; font-size: 11px; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 999px; padding: 2px 9px;
+}
+.qdel {
+  flex: none; background: none; border: none; color: var(--muted);
+  font-size: 13px; cursor: pointer; padding: 2px 5px; line-height: 1;
+}
+.qdel:hover { color: #c0533e; }
 
-/* ── מסך 3: נגן ── */
+/* ── screen 3: player ── */
 .screen {
   position: relative; background: var(--screen);
   border-radius: 16px; height: 260px; overflow: hidden;
@@ -478,7 +560,7 @@ body {
 }
 .subline:empty { display: none; }
 
-/* פקדי ניגון — חלק מ-.screen כדי שיישארו גלויים גם במסך מלא */
+/* playback controls — part of .screen so they stay visible in fullscreen */
 .ctrls {
   position: absolute; bottom: 0; left: 0; right: 0; z-index: 2;
   display: flex; align-items: center; gap: 8px;
@@ -522,11 +604,11 @@ body {
   text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ── מסך מלא: ה-overlay נשאר חלק מהמכל ולכן הכתוביות והפקדים מופיעים ── */
+/* fullscreen: overlay stays part of the container so subtitles and controls remain visible */
 .screen:fullscreen { height: 100%; width: 100%; border-radius: 0; }
 .screen:-webkit-full-screen { height: 100%; width: 100%; }
 
-/* כפתור יציאה ממסך מלא — גלוי רק בתוך מסך מלא, ESC לא תמיד מוכר/נוח */
+/* exit fullscreen button — visible only inside fullscreen; not everyone remembers ESC */
 .exitfs {
   position: absolute; top: 12px; left: 12px; z-index: 3;
   background: rgba(20, 14, 8, 0.55); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
@@ -536,7 +618,7 @@ body {
 .exitfs[hidden] { display: none; }
 .exitfs:hover { background: rgba(20, 14, 8, 0.75); }
 
-/* ── פאנל תמליל (עריכה · חיפוש · ייצוא) ── */
+/* ── transcript panel (search · edit · export) ── */
 .transcript { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
 .tc-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 .tc-search {
@@ -568,3 +650,33 @@ body {
 }
 .tc-text:focus { background: var(--panel); box-shadow: 0 0 0 1px var(--accent); }
 .tc-status { margin-top: 8px; font-size: 12px; color: var(--c2); min-height: 16px; }
+
+/* ── first-run onboarding modal ── */
+.onboard-ov {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(20, 14, 8, 0.5);
+  display: flex; align-items: center; justify-content: center; padding: 22px;
+}
+.onboard-ov[hidden] { display: none; }
+.onboard {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 18px;
+  max-width: 440px; width: 100%; padding: 26px 26px 22px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+}
+.onboard-title { font-size: 19px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.onboard-text { font-size: 13.5px; color: var(--muted); line-height: 1.6; margin-bottom: 16px; }
+.onboard-modes { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.onboard-modes li { display: flex; gap: 12px; align-items: flex-start; }
+.om-ic { flex: none; font-size: 19px; width: 26px; text-align: center; }
+.onboard-modes b { display: block; font-size: 13.5px; color: var(--text); margin-bottom: 1px; }
+.onboard-modes span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.onboard-tip {
+  font-size: 12.5px; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 18px;
+}
+.onboard-btn {
+  width: 100%; background: var(--accent); color: #fff; border: none;
+  border-radius: 999px; padding: 12px 22px;
+  font-family: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;
+}
+.onboard-btn:hover { filter: brightness(1.05); }

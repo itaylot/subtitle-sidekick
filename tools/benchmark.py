@@ -1,10 +1,10 @@
-"""benchmark.py — מודד זמן תמלול של קטע קבוע, כדי לבדוק אם שינוי הגדרות (cpu_threads, VAD) עוזר.
+"""benchmark.py — measure transcription time on a fixed clip to evaluate setting changes (cpu_threads, VAD).
 
-שימוש:
-  python tools/benchmark.py "קטע_10_דקות.mp3"
-  python tools/benchmark.py "קטע_10_דקות.mp3" --threads 4 --silence 700
+Usage:
+  python tools/benchmark.py "10min_clip.mp3"
+  python tools/benchmark.py "10min_clip.mp3" --threads 4 --silence 700
 
-הריץ כמה פעמים עם ערכים שונים על אותו קובץ והשווה את "real_time_factor".
+Run several times with different values on the same file and compare "real_time_factor".
 """
 
 import os
@@ -26,10 +26,10 @@ import engine
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("src", help="קובץ וידאו/אודיו לבדיקה")
+    p.add_argument("src", help="video/audio file to test")
     p.add_argument("--threads", type=int, default=engine.CPU_THREADS, help="cpu_threads")
-    p.add_argument("--silence", type=int, default=500, help="min_silence_duration_ms ל-VAD")
-    p.add_argument("--fast", action="store_true", help="שימוש במודל המהיר")
+    p.add_argument("--silence", type=int, default=500, help="min_silence_duration_ms for VAD")
+    p.add_argument("--fast", action="store_true", help="use the fast model")
     args = p.parse_args()
 
     if not os.path.isfile(args.src):
@@ -39,10 +39,10 @@ def main():
     name = engine.MODEL_FAST if args.fast else engine.MODEL_ACCURATE
     dev, ct = engine._resolve_device()
 
-    print(f"מודל: {name} | device={dev} compute={ct} cpu_threads={args.threads} silence={args.silence}ms")
+    print(f"model: {name} | device={dev} compute={ct} cpu_threads={args.threads} silence={args.silence}ms")
     t_load = time.time()
     model = WhisperModel(name, device=dev, compute_type=ct, cpu_threads=args.threads, num_workers=1)
-    print(f"טעינת מודל: {time.time() - t_load:.1f}s")
+    print(f"model load: {time.time() - t_load:.1f}s")
 
     t0 = time.time()
     segments, info = model.transcribe(
@@ -53,8 +53,8 @@ def main():
     dur = getattr(info, "duration", 0) or 0
     rtf = elapsed / dur if dur else 0
 
-    print(f"\nאורך קובץ: {dur:.1f}s | זמן תמלול: {elapsed:.1f}s | cues: {n}")
-    print(f"real_time_factor (זמן/אורך, נמוך=מהיר יותר): {rtf:.2f}")
+    print(f"\nfile duration: {dur:.1f}s | transcription time: {elapsed:.1f}s | cues: {n}")
+    print(f"real_time_factor (time/duration, lower=faster): {rtf:.2f}")
 
 
 if __name__ == "__main__":

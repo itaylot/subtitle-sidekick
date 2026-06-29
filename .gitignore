@@ -26,6 +26,13 @@ STORE_LISTING.md
 BUILD_SPEC.md
 CONTEXT.md
 IDEAS.md
+PLAN.md
+
+# כלי עבודה אישיים (לא חלק מהפרויקט המשותף)
+.claude/
+
+# חומרי שיווק — אורפנים/לא מקושרים, נשארים מקומית עד שייעשה בהם שימוש
+docs/marketing/
 
 # OS / IDE
 .DS_Store

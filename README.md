@@ -154,20 +154,22 @@ docker build -t YOUR_DOCKERHUB_USERNAME/subtitle-sidekick-server:latest .
 docker push YOUR_DOCKERHUB_USERNAME/subtitle-sidekick-server:latest
 ```
 
-מחליפים את `YOUR_DOCKERHUB_USERNAME` בשם המשתמש שלכם ב-Docker Hub (לדוגמה אם שם המשתמש `dani123` → `dani123/subtitle-sidekick-server:latest`).
+בשורות האלה, מחליפים את `YOUR_DOCKERHUB_USERNAME` בשם המשתמש שלכם ב-Docker Hub (למשל אם שם המשתמש הוא `dani123`, השם המלא יהיה `dani123/subtitle-sidekick-server:latest`).
 
-- `docker login` מבקש שם משתמש/סיסמה של Docker Hub — חד-פעמי.
-- `docker build` מוריד את המודל העברי (כמה GB) ובונה את ה-image — **לוקח זמן, אפילו 20-30 דקות**, בהתאם למהירות האינטרנט. זה תקין, אפשר להשאיר רץ ברקע.
-- `docker push` מעלה את ה-image המוכן לחשבון שלכם ב-Docker Hub.
+הסבר לכל שורה:
+
+- **שורה ראשונה** (`docker login`) — מבקשת שם משתמש וסיסמה של Docker Hub; חד-פעמי.
+- **שורה שנייה** (`docker build`) — מורידה את המודל העברי (כמה GB) ובונה את ה-image. **לוקח זמן, אפילו 20-30 דקות**, בהתאם למהירות האינטרנט. זה תקין, אפשר להשאיר רץ ברקע.
+- **שורה שלישית** (`docker push`) — מעלה את ה-image המוכן לחשבון שלכם ב-Docker Hub.
 
 ### שלב 3 — יצירת ה-Endpoint ב-RunPod
 
-1. ב-RunPod, תפריט צד → **Serverless** → **+ New Endpoint**.
+1. נכנסים ב-RunPod לתפריט הצד → **Serverless** → **+ New Endpoint**.
 2. בוחרים **Custom Source**.
-3. בשדה ה-image מדביקים בדיוק את מה שדחפתם בשלב 2: `YOUR_DOCKERHUB_USERNAME/subtitle-sidekick-server:latest`.
-4. **GPU:** בוחרים אופציה זולה שמספיקה (RTX A4000 או A5000) — אין צורך ב-GPU חזק לתמלול.
-5. **Workers:** Min Workers = `0` (כך שלא משלמים כשלא משתמשים), Max Workers = `1` (מספיק לשימוש אישי).
-6. **Create Endpoint**.
+3. בשדה ה-image מדביקים בדיוק את השם המלא שדחפתם בשלב 2 (`YOUR_DOCKERHUB_USERNAME/subtitle-sidekick-server:latest`).
+4. בוחרים GPU — אופציה זולה שמספיקה (RTX A4000 או A5000), אין צורך ב-GPU חזק לתמלול.
+5. קובעים Workers: כך ש-Min Workers = `0` (לא משלמים כשלא משתמשים) ו-Max Workers = `1` (מספיק לשימוש אישי).
+6. לוחצים על כפתור **Create Endpoint**.
 7. בדף ה-endpoint שנפתח, בראש העמוד מופיע **Endpoint ID** (מחרוזת אותיות/ספרות) — מעתיקים אותו.
 
 ### שלב 4 — הזנת הפרטים באפליקציה

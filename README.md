@@ -146,7 +146,7 @@ Replace `YOUR_DOCKERHUB_USERNAME` with your Docker Hub username. The `build` ste
 
 Local mode (the default): everything runs on your machine — audio never leaves the computer and is never stored anywhere.
 
-Server mode (optional, only when deliberately enabled): audio is uploaded to a server **you configured** — not to the developer's server, and not to any shared server.
+Server mode (optional, only when deliberately enabled): audio is uploaded only to the RunPod endpoint **you create on your own account**. The app ships with no server and no embedded credentials — the prebuilt image is just the transcription code, running on your own infrastructure.
 
 ---
 

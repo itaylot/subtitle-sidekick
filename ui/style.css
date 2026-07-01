@@ -492,8 +492,12 @@ body {
   transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
 }
 .newcourse-btn:hover { background: var(--accent-deep); transform: translateY(-1px); }
-.courses { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.course { border: 1px solid var(--hairline); border-radius: var(--r-md); overflow: hidden; background: var(--card); box-shadow: var(--shadow-sm); }
+/* min-height:0 lets this flex child actually scroll instead of overflowing the drawer
+   (without it, a course with many lectures pushes the first ones out of reach) */
+.courses { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+/* flex:none so course boxes keep their natural height instead of being squeezed by the column
+   flexbox (which, combined with overflow:hidden, was clipping the lectures inside) */
+.course { flex: none; border: 1px solid var(--hairline); border-radius: var(--r-md); overflow: hidden; background: var(--card); box-shadow: var(--shadow-sm); }
 .course-head {
   display: flex; align-items: center; gap: 8px; padding: 10px 13px;
   cursor: pointer; font-size: 13.5px; font-weight: 600;

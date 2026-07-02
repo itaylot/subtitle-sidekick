@@ -1539,7 +1539,9 @@ function showActionMenu(anchorEl, video, course, title) {
 
   document.body.appendChild(menu);
   const r = anchorEl.getBoundingClientRect();
-  menu.style.top = r.bottom + 4 + "px";
+  let top = r.bottom + 4;   // flip above the anchor if the menu would overflow the window bottom
+  if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 4);
+  menu.style.top = top + "px";
   let left = r.right - menu.offsetWidth;
   left = Math.max(8, Math.min(left, window.innerWidth - menu.offsetWidth - 8));
   menu.style.left = left + "px";
@@ -1589,7 +1591,9 @@ function showSubtitleMenu(anchorEl) {
   }
   document.body.appendChild(menu);
   const r = anchorEl.getBoundingClientRect();
-  menu.style.top = r.bottom + 4 + "px";
+  let top = r.bottom + 4;   // flip above the anchor if the menu would overflow the window bottom
+  if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 4);
+  menu.style.top = top + "px";
   let left = r.right - menu.offsetWidth;
   left = Math.max(8, Math.min(left, window.innerWidth - menu.offsetWidth - 8));
   menu.style.left = left + "px";
@@ -1721,7 +1725,9 @@ document.addEventListener("keydown", (e) => {
   if (currentView !== "play") return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === "INPUT" || ae.tagName === "SELECT" || ae.isContentEditable)) return;
-  if (NATIVE_PLAYER && ae === video) return;   // let the browser's own controls handle keys
+  const isArrow = e.key === "ArrowLeft" || e.key === "ArrowRight";
+  // defer other keys (e.g. space) to the native player, but always own the 10-second arrow skip
+  if (NATIVE_PLAYER && ae === video && !isArrow) return;
   if (e.key === " ") { e.preventDefault(); video.paused ? video.play() : video.pause(); }
   else if (e.key === "ArrowLeft") { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
   else if (e.key === "ArrowRight") { e.preventDefault(); video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10); }

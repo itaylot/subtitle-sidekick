@@ -75,6 +75,21 @@ The README is what interviewers actually see. Current state is solid English pro
 
 ---
 
+## Things to remember during the process (personal notes)
+
+Easy to forget, costly if missed:
+
+- [ ] **Bump `version.txt` in the same commit** as any user-facing change, or the in-app updater won't notice a new version.
+- [ ] **Never commit secrets** — the RunPod endpoint/API key live only in `settings.json` under `Videos\Subtitle Sidekick` (outside the repo). Double-check before every push that nothing leaked into code or a test file.
+- [ ] **User data lives outside the repo** (`~/Videos/Subtitle Sidekick`: `library.json`, `settings.json`, `queue.json`, `dictionary.json`, video files). This is *why* updates are safe — don't ever move data back into the repo folder.
+- [ ] **Back up `library.json` before any manual edit** (a timestamped copy already sits next to it from the last repair).
+- [ ] **Dogfood the update flow** — you're the only user, so bump the version, push, and actually run Settings → Check for updates → Update now to confirm `update.bat` works end-to-end.
+- [ ] **Docker + OneDrive gotcha** — if the project is under OneDrive, `docker build` can fail on cloud-placeholder files (`invalid file request Dockerfile`). Build `runpod_server` from a non-OneDrive path (e.g. `C:\runpod_server`).
+- [ ] **RunPod endpoint settings** — Max Workers = 4 (parallel chunk transcription), Min Workers = 0 (scale-to-zero, no idle cost). The image bundles both models (Hebrew + `large-v3`).
+- [ ] **First-run model download (~1.5 GB)** is the scariest moment for a new user — keep the "one-time, this is the long part" messaging prominent.
+- [ ] **Pin Docker tags** (`:v2`, not `:latest`) so existing endpoints don't silently change when you rebuild.
+- [ ] **`.claude/` is gitignored** — launch.json and local tooling don't travel with the repo (fine, just remember it).
+
 ## Suggested order of execution (when you do sit down for it)
 
 1. **Phase 0 decision** (5 min, unblocks the rest).

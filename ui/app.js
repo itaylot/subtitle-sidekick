@@ -1128,9 +1128,15 @@ async function deleteCourseFlow(name, lecCount) {
 // a single lecture row (title + ⋯ action menu) — shared by the drawer and the Library detail list
 function renderLecRow(l) {
   const row = document.createElement("div");
-  row.className = "lec";
-  row.innerHTML = `<span class="lec-name">▶ ${esc(l.title)}</span>`;
-  row.onclick = () => openLecture(l.video);
+  row.className = "lec" + (l.missing ? " lec-missing" : "");
+  row.innerHTML = `<span class="lec-name">${l.missing ? "⚠" : "▶"} ${esc(l.title)}</span>`;
+  if (l.missing) {
+    // file unreachable right now (disconnected drive / OneDrive offline) — kept in the catalog,
+    // just not playable; the ⋯ menu stays so the user can still remove/rename it.
+    row.title = "קובץ הווידאו לא זמין כרגע (כונן מנותק?) — ההרצאה תחזור כשהקובץ יהיה נגיש";
+  } else {
+    row.onclick = () => openLecture(l.video);
+  }
   const kebab = document.createElement("button");
   kebab.className = "kebab"; kebab.textContent = "⋯"; kebab.title = "פעולות";
   kebab.onclick = (e) => { e.stopPropagation(); showActionMenu(kebab, l.video, l.course, l.title); };
@@ -1395,7 +1401,7 @@ function renderWidgets() {
   const total = library.lectures.length;
   if (!total) return;
   const viewed = library.lectures.filter((l) => l.viewed).length;
-  const firstUnwatched = library.lectures.find((l) => !l.viewed);
+  const firstUnwatched = library.lectures.find((l) => !l.viewed && !l.missing);
   const items = [
     { ic: "i-film", num: total, lbl: "הרצאות", act: openDrawer },
     { ic: "i-eye", num: viewed, lbl: "נצפו", act: openDrawer },
@@ -1418,7 +1424,7 @@ function renderResume() {
   let video = "";
   try { video = localStorage.getItem("lastVideo") || ""; } catch (e) {}
   const lec = video && library.lectures.find((l) => l.video === video);
-  const r = lec && getResume(video);
+  const r = lec && !lec.missing && getResume(video);   // don't offer resume for an unreachable file
   if (!lec || !r) { card.hidden = true; return; }
   card.hidden = false;
   $("resumeTitle").textContent = lec.title;

@@ -142,18 +142,50 @@ LIB_DIR = os.path.join(os.path.expanduser("~"), "Videos", "Subtitle Sidekick")
 LIB_PATH = os.path.join(LIB_DIR, "library.json")
 
 
+def _write_json_atomic(path, payload):
+    """Write JSON via tmp + os.replace so a crash mid-write can't leave a truncated file
+    (os.replace is an atomic rename — same pattern save_queue always used)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def _preserve_corrupt(path):
+    """Keep a copy of an unreadable JSON file so the next save can't destroy recoverable data.
+    Never overwrites an earlier copy — repeated corruptions get .corrupt, .corrupt.1, .corrupt.2, …"""
+    try:
+        if not os.path.exists(path):
+            return
+        dest = path + ".corrupt"
+        i = 1
+        while os.path.exists(dest):
+            dest = path + ".corrupt." + str(i)
+            i += 1
+        shutil.copyfile(path, dest)
+    except OSError:
+        pass
+
+
 def load_library():
     """Returns {courses: [...], lectures: [...]} (creates empty if missing)."""
     try:
         with open(LIB_PATH, encoding="utf-8") as f:
             data = json.load(f)
+    except FileNotFoundError:
+        data = {}
     except Exception:
+        _preserve_corrupt(LIB_PATH)   # unreadable ≠ empty — keep a copy before starting fresh
         data = {}
     data.setdefault("courses", [])
     data.setdefault("lectures", [])
-    # filter out lectures whose file no longer exists on disk
-    data["lectures"] = [l for l in data["lectures"] if os.path.exists(l.get("video", ""))]
-    # self-heal the course list: de-dupe, drop blanks, and make sure every course a surviving
+    # mark lectures whose video is unreachable right now instead of dropping them — a disconnected
+    # drive or a paused OneDrive must not erase the catalog. Display-only flag, recomputed on
+    # every load (the persisted value is never trusted).
+    for l in data["lectures"]:
+        l["missing"] = not os.path.exists(l.get("video", ""))
+    # self-heal the course list: de-dupe, drop blanks, and make sure every course a
     # lecture references is actually listed — otherwise renderDrawer hides that lecture entirely
     # (this is what made "orphaned"/mislabeled lectures invisible in older, corrupted libraries).
     seen = set(); courses = []
@@ -166,9 +198,16 @@ def load_library():
 
 
 def save_library(data):
-    os.makedirs(LIB_DIR, exist_ok=True)
-    with open(LIB_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    # rolling one-step backup: refresh .bak only from a *valid* current file, so a corrupt
+    # library.json can never clobber a good backup (the previous good copy then survives).
+    try:
+        if os.path.exists(LIB_PATH):
+            with open(LIB_PATH, encoding="utf-8") as f:
+                json.load(f)                       # validate before trusting it as the backup
+            shutil.copyfile(LIB_PATH, LIB_PATH + ".bak")
+    except (OSError, ValueError):
+        pass                                       # unreadable/corrupt → keep the existing good .bak
+    _write_json_atomic(LIB_PATH, data)
     return data
 
 
@@ -181,7 +220,10 @@ def load_settings():
     try:
         with open(SETTINGS_PATH, encoding="utf-8") as f:
             data = json.load(f)
+    except FileNotFoundError:
+        data = {}
     except Exception:
+        _preserve_corrupt(SETTINGS_PATH)
         data = {}
     data.setdefault("transcription_mode", "local_accurate")
     data.setdefault("transcription_language", "he")  # "" = auto-detect; "he"/"en"/... = Whisper code
@@ -206,9 +248,7 @@ def save_settings(update):
             data["cloud"].update(v)
         else:
             data[k] = v
-    os.makedirs(LIB_DIR, exist_ok=True)
-    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _write_json_atomic(SETTINGS_PATH, data)
     return data
 
 
@@ -219,9 +259,7 @@ def add_cloud_usage(seconds):
     cloud = data["cloud"]
     cloud["total_seconds"] = float(cloud.get("total_seconds") or 0) + seconds
     cloud["total_cost"] = float(cloud.get("total_cost") or 0) + seconds / 3600.0 * float(cloud.get("price_per_hour") or 0)
-    os.makedirs(LIB_DIR, exist_ok=True)
-    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _write_json_atomic(SETTINGS_PATH, data)
     return data
 
 
@@ -234,7 +272,10 @@ def load_dictionary():
     try:
         with open(DICT_PATH, encoding="utf-8") as f:
             data = json.load(f)
+    except FileNotFoundError:
+        data = {}
     except Exception:
+        _preserve_corrupt(DICT_PATH)
         data = {}
     rules = data.get("rules") if isinstance(data, dict) else None
     return {"rules": rules if isinstance(rules, list) else []}
@@ -249,9 +290,7 @@ def save_dictionary(rules):
         if frm and frm not in seen:
             seen.add(frm)
             clean.append({"from": frm, "to": to})
-    os.makedirs(LIB_DIR, exist_ok=True)
-    with open(DICT_PATH, "w", encoding="utf-8") as f:
-        json.dump({"rules": clean}, f, ensure_ascii=False, indent=2)
+    _write_json_atomic(DICT_PATH, {"rules": clean})
     return {"rules": clean}
 
 
@@ -387,12 +426,8 @@ def load_queue():
 
 
 def save_queue(jobs):
-    """Atomically persist the queue (write to .tmp then os.replace) so a crash can't corrupt it."""
-    os.makedirs(LIB_DIR, exist_ok=True)
-    tmp = QUEUE_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"version": 1, "jobs": jobs or []}, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, QUEUE_PATH)
+    """Atomically persist the queue so a crash can't corrupt it."""
+    _write_json_atomic(QUEUE_PATH, {"version": 1, "jobs": jobs or []})
     return True
 
 
@@ -800,4 +835,20 @@ if __name__ == "__main__":
     assert cues[1]["text"] == "נטוורקינג", cues[1]              # not replaced inside a longer word
     assert cues[2]["text"] == "network חדש", cues[2]
     assert n == 2, n
+
+    # persistence: atomic write round-trips; a corrupt file is preserved, not overwritten
+    import tempfile
+    td = tempfile.mkdtemp()
+    p = os.path.join(td, "t.json")
+    _write_json_atomic(p, {"a": 1})
+    with open(p, encoding="utf-8") as f:
+        assert json.load(f) == {"a": 1}
+    assert not os.path.exists(p + ".tmp")                        # tmp cleaned up by the rename
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("{ truncated")                                   # simulate a crash mid-write
+    _preserve_corrupt(p)
+    assert os.path.exists(p + ".corrupt")
+    _preserve_corrupt(p)                                         # a second corruption must not clobber
+    assert os.path.exists(p + ".corrupt.1")
+    shutil.rmtree(td, ignore_errors=True)
     print("engine self-check OK")

@@ -24,6 +24,7 @@
     <div class="bar">
       <button class="menubtn" id="menuBtn" title="הקורסים שלי"><svg class="ic"><use href="#i-menu"/></svg></button>
       <button class="homebtn" id="homeBtn" title="מסך הבית"><svg class="ic"><use href="#i-home"/></svg></button>
+      <button class="homebtn" id="libraryBtn" title="הספרייה שלי"><svg class="ic"><use href="#i-library"/></svg></button>
       <div class="appname">Subtitle Sidekick</div>
       <button class="jobpill" id="jobPill" hidden>⏳ <span id="jobPct">0%</span></button>
       <div class="barsp"></div>
@@ -207,6 +208,35 @@
           </div>
           <div class="tc-list" id="tcList"></div>
           <div class="tc-status" id="tcStatus"></div>
+        </div>
+      </section>
+
+      <!-- library screen: courses overview grid → course detail list -->
+      <section class="view" id="view-library" hidden>
+        <div class="lib-head">
+          <button class="kebab lib-back" id="libBackBtn" title="חזרה לקורסים" hidden>→</button>
+          <div class="kicker lib-kicker">הספרייה שלי</div>
+          <div class="lib-head-sp"></div>
+          <button class="course-add" id="libNewCourseBtn" title="יצירת קורס חדש">+ קורס</button>
+        </div>
+        <div class="newcourse-inline" id="libNewCourseRow" hidden>
+          <input class="urlin" id="libNewCourseIn" placeholder="שם הקורס החדש…" />
+          <button class="urlbtn course-add-ok" id="libNewCourseOk">צור</button>
+        </div>
+
+        <div class="lib-grid" id="libGrid"></div>
+
+        <div class="lib-detail" id="libDetail" hidden>
+          <div class="lib-detail-head">
+            <div class="lib-detail-titlewrap">
+              <div class="lib-detail-title" id="libDetailTitle"></div>
+              <div class="lib-detail-count" id="libDetailCount"></div>
+            </div>
+            <button class="lib-detail-act" id="libRenBtn" title="שינוי שם הקורס">✏</button>
+            <button class="lib-detail-act" id="libDelBtn" title="מחיקת קורס">🗑</button>
+          </div>
+          <input class="tc-search lib-detail-search" id="libDetailSearch" placeholder="🔎 חיפוש בקורס הזה…" />
+          <div class="lib-detail-list" id="libDetailList"></div>
         </div>
       </section>
 

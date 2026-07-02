@@ -512,6 +512,48 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
 .newcourse-inline[hidden] { display: none; }
 .course-add-ok { flex: none; }
 
+/* ── library screen: courses grid + course detail ── */
+.lib-head { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.lib-kicker { margin-bottom: 0; }
+.lib-back[hidden] { display: none; }
+.lib-head-sp { flex: 1; }
+
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.lib-grid[hidden] { display: none; }
+
+.libcard {
+  text-align: right; cursor: pointer; font-family: inherit;
+  background: var(--card); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+  padding: 16px 16px 14px;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.libcard:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.libcard-name {
+  font-family: var(--font-display); font-size: 15px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.libcard-count { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.libcard-bar { margin-bottom: 6px; }
+.libcard-sub { font-size: 11px; color: var(--muted); }
+
+.lib-detail[hidden] { display: none; }
+.lib-detail-head { display: flex; align-items: center; gap: 4px; margin-bottom: 14px; }
+.lib-detail-titlewrap { flex: 1; min-width: 0; }
+.lib-detail-title {
+  font-family: var(--font-display); font-size: 19px; font-weight: 800; letter-spacing: -0.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lib-detail-count { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.lib-detail-act {
+  flex: none; background: none; border: none; color: var(--muted);
+  font-size: 15px; cursor: pointer; padding: 5px 8px; border-radius: 7px;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.lib-detail-act:hover { color: var(--accent); background: var(--panel); }
+.lib-detail-search { width: 100%; margin-bottom: 12px; }
+.lib-detail-list { display: flex; flex-direction: column; gap: 4px; }
+
 /* ── sidebar: my courses ── */
 .drawer-ov {
   position: fixed; inset: 0; z-index: 40;

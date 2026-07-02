@@ -78,11 +78,12 @@ let lastError = "";
 // ── screen switching ──
 let currentView = "home";
 function show(view) {
-  for (const id of ["view-home", "view-open", "view-proc", "view-play", "view-guide"]) {
+  for (const id of ["view-home", "view-open", "view-proc", "view-play", "view-guide", "view-library"]) {
     $(id).hidden = id !== "view-" + view;
   }
   currentView = view;
   if (view === "home") refreshHome();
+  if (view === "library") { libOpenCourse = null; refreshLibrary(); }
 }
 
 // where "back" in the player leads — set based on which screen we came from
@@ -1080,6 +1081,9 @@ async function refreshLibrary() {
   } catch (e) { return; }
   renderCourseSelect();
   renderDrawer();
+  if (currentView === "library") {
+    if (libOpenCourse !== null) renderLibraryDetail(); else renderLibraryOverview();
+  }
 }
 
 // course selector on the open screen (preserves current selection)
@@ -1093,6 +1097,45 @@ function renderCourseSelect() {
     sel.appendChild(o);
   }
   if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+}
+
+// shared course rename/delete flows — used by both the sidebar drawer and the Library screen
+// so the two surfaces can never drift out of sync.
+async function renameCourseFlow(name) {
+  const nn = prompt("שם חדש לקורס:", name);
+  if (!nn || !nn.trim() || nn.trim() === name) return null;
+  const newName = nn.trim();
+  await window.pywebview.api.rename_course(name, newName);
+  if (openCourses.has(name)) { openCourses.delete(name); openCourses.add(newName); }
+  await refreshLibrary();
+  return newName;
+}
+async function deleteCourseFlow(name, lecCount) {
+  const ok = await confirmModal({
+    title: `מחיקת הקורס "${name}"`,
+    body: lecCount
+      ? `${lecCount} ${lecCount === 1 ? "הרצאה תעבור" : "הרצאות יעברו"} ל"ללא קורס". קובצי הווידאו והכתוביות לא נמחקים — רק הקורס עצמו.`
+      : "הקורס ריק — אין הרצאות מושפעות.",
+    buttons: [{ label: "מחיקת הקורס", value: "del", danger: true }],
+  });
+  if (!ok) return false;
+  await window.pywebview.api.remove_course(name);
+  openCourses.delete(name);
+  await refreshLibrary();
+  return true;
+}
+
+// a single lecture row (title + ⋯ action menu) — shared by the drawer and the Library detail list
+function renderLecRow(l) {
+  const row = document.createElement("div");
+  row.className = "lec";
+  row.innerHTML = `<span class="lec-name">▶ ${esc(l.title)}</span>`;
+  row.onclick = () => openLecture(l.video);
+  const kebab = document.createElement("button");
+  kebab.className = "kebab"; kebab.textContent = "⋯"; kebab.title = "פעולות";
+  kebab.onclick = (e) => { e.stopPropagation(); showActionMenu(kebab, l.video, l.course, l.title); };
+  row.appendChild(kebab);
+  return row;
 }
 
 // course list in sidebar, each collapsible to show its lectures
@@ -1128,33 +1171,12 @@ function renderDrawer() {
     if (name) {
       const ren = document.createElement("button");
       ren.className = "course-del"; ren.textContent = "✏"; ren.title = "שינוי שם הקורס";
-      ren.onclick = async (e) => {
-        e.stopPropagation();
-        const nn = prompt("שם חדש לקורס:", name);
-        if (!nn || !nn.trim() || nn.trim() === name) return;
-        await window.pywebview.api.rename_course(name, nn.trim());
-        if (openCourses.has(name)) { openCourses.delete(name); openCourses.add(nn.trim()); }
-        refreshLibrary();
-      };
+      ren.onclick = (e) => { e.stopPropagation(); renameCourseFlow(name); };
       head.appendChild(ren);
 
       const del = document.createElement("button");
       del.className = "course-del"; del.textContent = "🗑"; del.title = "מחיקת קורס";
-      del.onclick = async (e) => {
-        e.stopPropagation();
-        const n = lecs.length;
-        const ok = await confirmModal({
-          title: `מחיקת הקורס "${name}"`,
-          body: n
-            ? `${n} ${n === 1 ? "הרצאה תעבור" : "הרצאות יעברו"} ל"ללא קורס". קובצי הווידאו והכתוביות לא נמחקים — רק הקורס עצמו.`
-            : "הקורס ריק — אין הרצאות מושפעות.",
-          buttons: [{ label: "מחיקת הקורס", value: "del", danger: true }],
-        });
-        if (!ok) return;
-        await window.pywebview.api.remove_course(name);
-        openCourses.delete(name);
-        refreshLibrary();
-      };
+      del.onclick = (e) => { e.stopPropagation(); deleteCourseFlow(name, lecs.length); };
       head.appendChild(del);
     }
     head.onclick = () => {
@@ -1171,24 +1193,114 @@ function renderDrawer() {
       e.textContent = "אין הרצאות בקורס הזה";
       list.appendChild(e);
     }
-    for (const l of lecs) {
-      const row = document.createElement("div");
-      row.className = "lec";
-      row.innerHTML = `<span class="lec-name">▶ ${esc(l.title)}</span>`;
-      row.onclick = () => openLecture(l.video);
-
-      const kebab = document.createElement("button");
-      kebab.className = "kebab"; kebab.textContent = "⋯"; kebab.title = "פעולות";
-      kebab.onclick = (e) => { e.stopPropagation(); showActionMenu(kebab, l.video, l.course, l.title); };
-      row.appendChild(kebab);
-      list.appendChild(row);
-    }
+    for (const l of lecs) list.appendChild(renderLecRow(l));
     box.appendChild(list);
     wrap.appendChild(box);
   }
 }
 
 const openCourses = new Set();
+
+// ── library screen: courses overview grid → course detail list ──
+// (dedicated management view — the drawer stays a lightweight quick-nav)
+let libOpenCourse = null;   // null = overview; "" = the "no course" bucket; otherwise a course name
+
+function setLibraryMode(detail) {
+  $("libBackBtn").hidden = !detail;
+  $("libNewCourseBtn").hidden = detail;
+  $("libNewCourseRow").hidden = true;
+  $("libGrid").hidden = detail;
+  $("libDetail").hidden = !detail;
+}
+
+function renderLibraryOverview() {
+  libOpenCourse = null;
+  setLibraryMode(false);
+  const grid = $("libGrid");
+  grid.innerHTML = "";
+  const by = lecturesByCourse();
+  const names = library.courses.slice();
+  if (by[""] && by[""].length) names.push("");
+  if (!names.length) {
+    grid.innerHTML = '<div class="courses-empty">אין עדיין קורסים.<br>צרו קורס חדש או תמללו הרצאה.</div>';
+    return;
+  }
+  for (const name of names) {
+    const lecs = by[name] || [];
+    const watched = lecs.filter((l) => l.viewed).length;
+    const pct = lecs.length ? Math.round((watched / lecs.length) * 100) : 0;
+    const card = document.createElement("button");
+    card.className = "libcard";
+    card.innerHTML =
+      `<div class="libcard-name">${esc(name || "ללא קורס")}</div>` +
+      `<div class="libcard-count">${lecs.length} ${lecs.length === 1 ? "הרצאה" : "הרצאות"}</div>` +
+      `<div class="resume-bar libcard-bar"><div class="resume-fill" style="width:${pct}%"></div></div>` +
+      `<div class="libcard-sub">${watched}/${lecs.length} נצפו</div>`;
+    card.onclick = () => openLibraryCourse(name);
+    grid.appendChild(card);
+  }
+}
+
+function openLibraryCourse(name) {
+  libOpenCourse = name;
+  setLibraryMode(true);
+  renderLibraryDetail();
+}
+
+function renderLibraryDetail() {
+  const name = libOpenCourse;
+  const lecs = (lecturesByCourse()[name]) || [];
+  $("libDetailTitle").textContent = name || "ללא קורס";
+  $("libDetailCount").textContent = `${lecs.length} ${lecs.length === 1 ? "הרצאה" : "הרצאות"}`;
+  $("libRenBtn").hidden = !name;
+  $("libDelBtn").hidden = !name;
+  $("libDetailSearch").value = "";
+  renderLibraryDetailList(lecs, "");
+}
+
+function renderLibraryDetailList(lecs, q) {
+  const wrap = $("libDetailList");
+  wrap.innerHTML = "";
+  const filtered = q ? lecs.filter((l) => l.title.toLowerCase().includes(q.toLowerCase())) : lecs;
+  if (!filtered.length) {
+    wrap.innerHTML = `<div class="courses-empty">${q ? "אין תוצאות." : "אין הרצאות בקורס הזה."}</div>`;
+    return;
+  }
+  for (const l of filtered) wrap.appendChild(renderLecRow(l));
+}
+
+$("libraryBtn").addEventListener("click", () => show("library"));
+$("libBackBtn").addEventListener("click", renderLibraryOverview);
+$("libDetailSearch").addEventListener("input", () => {
+  const lecs = (lecturesByCourse()[libOpenCourse]) || [];
+  renderLibraryDetailList(lecs, $("libDetailSearch").value.trim());
+});
+$("libRenBtn").addEventListener("click", async () => {
+  const newName = await renameCourseFlow(libOpenCourse);
+  if (newName != null) { libOpenCourse = newName; renderLibraryDetail(); }
+});
+$("libDelBtn").addEventListener("click", async () => {
+  const lecCount = ((lecturesByCourse()[libOpenCourse]) || []).length;
+  const ok = await deleteCourseFlow(libOpenCourse, lecCount);
+  if (ok) renderLibraryOverview();
+});
+
+// create a course inline from the Library screen (same mechanism as the upload screen's "+ קורס")
+$("libNewCourseBtn").addEventListener("click", () => {
+  const row = $("libNewCourseRow");
+  row.hidden = !row.hidden;
+  if (!row.hidden) $("libNewCourseIn").focus();
+});
+async function createLibraryCourseInline() {
+  const name = $("libNewCourseIn").value.trim();
+  if (name) { await window.pywebview.api.create_course(name); await refreshLibrary(); }
+  $("libNewCourseIn").value = ""; $("libNewCourseRow").hidden = true;
+}
+$("libNewCourseOk").addEventListener("click", createLibraryCourseInline);
+$("libNewCourseIn").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") createLibraryCourseInline();
+  if (e.key === "Escape") { $("libNewCourseIn").value = ""; $("libNewCourseRow").hidden = true; }
+});
 
 // ── home screen: stats + tip + quick actions ──
 const LEARNING_TIPS = [
@@ -1289,7 +1401,7 @@ function renderWidgets() {
     { ic: "i-eye", num: viewed, lbl: "נצפו", act: openDrawer },
     { ic: "i-clock", num: total - viewed, lbl: "ממתינות",
       act: () => (firstUnwatched ? openLecture(firstUnwatched.video) : openDrawer()) },
-    { ic: "i-library", num: library.courses.length, lbl: "קורסים", act: openDrawer },
+    { ic: "i-library", num: library.courses.length, lbl: "קורסים", act: () => show("library") },
   ];
   for (const s of items) {
     const el = document.createElement("button");
@@ -1325,7 +1437,7 @@ function renderHomeCourses() {
     const chip = document.createElement("button");
     chip.className = "hc-chip";
     chip.innerHTML = `<span class="hc-name">${esc(name)}</span><span class="hc-count">${by[name].length}</span>`;
-    chip.onclick = () => { openCourses.add(name); openDrawer(); renderDrawer(); };
+    chip.onclick = () => { show("library"); openLibraryCourse(name); };
     wrap.appendChild(chip);
   }
 }

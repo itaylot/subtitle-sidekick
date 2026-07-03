@@ -19,7 +19,6 @@ Built primarily for Hebrew lectures (using a Hebrew-specialized Whisper model), 
 
 - [Highlights](#-highlights)
 - [Two ways to transcribe](#-two-ways-to-transcribe)
-- [Demo](#-demo)
 - [Installation](#-installation-one-time)
 - [How to use](#-how-to-use)
 - [Fast cloud mode (optional)](#-fast-cloud-mode-optional)
@@ -63,12 +62,6 @@ The flagship experience is the **personal GPU server** — fastest, and highest 
 | **Best for** | Quick, private, offline use | Heavy lectures, English, best accuracy |
 
 > Local (Lite) itself has two levels — **"quality"** (more accurate, slower) and **"fast"** (quicker, lower accuracy) — chosen from the transcription-mode menu. Language (Hebrew / English / auto-detect) is a separate per-lecture choice, not a mode. See [Fast cloud mode](#-fast-cloud-mode-optional) to set up the GPU server.
-
-## 🎥 Demo
-
-Want to see the app before installing anything? Open [`ui/demo.html`](ui/demo.html) in any browser for a self-playing tour of the real interface — the home dashboard, a live transcription, the player with synced Hebrew captions, and in-transcript search. No setup, no backend, no Python required.
-
----
 
 ## 📥 Installation (one-time)
 
@@ -224,7 +217,7 @@ engine.py                   transcription engine (faster-whisper / ivrit-ai) + e
 worker.py                   runs a local transcription in a separate process (so it can be paused/cancelled)
 cloud_backend.py            transcription via a personal GPU server (RunPod) — see fast cloud mode
 ui/                         the user interface (HTML/CSS/JS + local fonts)
-  demo.html                 self-playing tour of the UI — open in a browser, no install needed
+  demo.html                 scripted UI walkthrough used to record promo clips
 run.bat                     launcher (auto-install on first run; refreshes dependencies on later runs)
 update.bat                  one-click updater (downloads latest from GitHub, keeps your data)
 version.txt                 current app version (compared against GitHub for the update check)

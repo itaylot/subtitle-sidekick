@@ -19,6 +19,7 @@ Built primarily for Hebrew lectures (using a Hebrew-specialized Whisper model), 
 
 - [Highlights](#-highlights)
 - [Two ways to transcribe](#-two-ways-to-transcribe)
+- [Demo](#-demo)
 - [Installation](#-installation-one-time)
 - [How to use](#-how-to-use)
 - [Fast cloud mode (optional)](#-fast-cloud-mode-optional)
@@ -43,7 +44,7 @@ Built primarily for Hebrew lectures (using a Hebrew-specialized Whisper model), 
 - 📝 **Personal correction dictionary** — recurring mistakes (lecturer names, technical terms, English words like "PyTorch") are auto-corrected after every transcription, matched on whole-word boundaries so valid text is never damaged.
 - 📄 **Export** transcripts to TXT / Word.
 - ⬆️ **One-click updates** — the app checks GitHub for a newer version and can update itself; your library and settings are never touched.
-- ⛶ **Full player**: fullscreen, 10-second skip, 0.5x–2x playback speed, and subtitle size/background controls (🅰).
+- ⛶ **Full player**: fullscreen, 10-second skip, 0.5x–2x playback speed, and subtitle size/background controls.
 - 📖 **Built-in usage guide** — a ❓ button in the top bar opens an in-app guide.
 - 🔒 **Local by default** — no cloud, no account; audio never leaves your machine unless you explicitly opt into cloud mode.
 
@@ -65,7 +66,7 @@ The flagship experience is the **personal GPU server** — fastest, and highest 
 
 ## 🎥 Demo
 
-A self-playing product tour of the real interface (no setup, no backend) lives at [`ui/demo.html`](ui/demo.html) — open it in a browser to watch the UI drive itself through the home dashboard, a transcription, the player with live Hebrew captions, and in-transcript search. It's built for screen-recording a short demo clip (pair it with a recorder like [Cap](https://cap.so/) or FocuSee for gentle zoom and cursor highlighting).
+Want to see the app before installing anything? Open [`ui/demo.html`](ui/demo.html) in any browser for a self-playing tour of the real interface — the home dashboard, a live transcription, the player with synced Hebrew captions, and in-transcript search. No setup, no backend, no Python required.
 
 ---
 
@@ -81,10 +82,10 @@ That's it. From then on, just double-click the desktop icon. **No command line r
 
 ---
 
-## ⭐ How to use
+## 🚀 How to use
 
 1. **Get a lecture** — paste a direct link (YouTube / Moodle / any direct video link) and click **Download**, or download it yourself (e.g. with the Video DownloadHelper Chrome extension).
-2. **Open the app** (desktop icon, or a `subsidekick://open` bookmark in Chrome) — it opens to the **home screen**.
+2. **Open the app** — from the desktop icon, or from a browser bookmark pointing at `subsidekick://open` (the installer registers this link type automatically). It opens to the **home screen**.
 3. From home: **New transcription** → **drag or pick** a file (several at once is fine — they enter a **queue** that transcribes sequentially). Before uploading you can choose a **course** and the **lecture language** (Hebrew / English / auto-detect) → **Create subtitles** → **▶ Watch with subtitles**.
 
 Every transcribed lecture is automatically registered in the sidebar (☰), organized by course, with a per-lecture action menu (⋯): rename, move to another course, open in browser, remove.
@@ -223,7 +224,7 @@ engine.py                   transcription engine (faster-whisper / ivrit-ai) + e
 worker.py                   runs a local transcription in a separate process (so it can be paused/cancelled)
 cloud_backend.py            transcription via a personal GPU server (RunPod) — see fast cloud mode
 ui/                         the user interface (HTML/CSS/JS + local fonts)
-  demo.html                 self-playing product tour of the real UI (for screen-recording a demo)
+  demo.html                 self-playing tour of the UI — open in a browser, no install needed
 run.bat                     launcher (auto-install on first run; refreshes dependencies on later runs)
 update.bat                  one-click updater (downloads latest from GitHub, keeps your data)
 version.txt                 current app version (compared against GitHub for the update check)

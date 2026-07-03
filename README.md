@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Windows-desktop-c59a3f" alt="Windows desktop" />
 </p>
 
-*A local-first desktop app that transcribes recorded lectures into perfectly time-synced subtitles — free, private, and account-free. Runs entirely on your machine by default, with an optional personal GPU-cloud mode for speed.*
+*A desktop app that transcribes recorded lectures into accurately time-synced subtitles. Works fully local and private out of the box — no account, no cloud — with an optional personal GPU-cloud mode for the fastest and most accurate results.*
 
 Built primarily for Hebrew lectures (using a Hebrew-specialized Whisper model), with English and auto-detect support. Point it at a recorded lecture — a local file or a link — and get an interactive player with searchable, editable, exportable subtitles.
 
@@ -49,9 +49,9 @@ Built primarily for Hebrew lectures (using a Hebrew-specialized Whisper model), 
 
 ## 🎬 Two ways to transcribe
 
-The flagship experience is the **personal GPU server** — fastest, and highest quality in both Hebrew and English. **Local (Lite)** mode is the zero-setup fallback: fully private, works with no account and no cloud, just slower and less accurate. Local mode is always the default; the GPU server is an optional, one-time setup on your own cloud account.
+The **personal GPU server** is the recommended path — fastest, and most accurate in both Hebrew and English. **Local** mode is the zero-setup default: fully private, works with no account and no cloud, just slower and less accurate. Local is always the default out of the box; the GPU server is an optional, one-time setup on your own cloud account.
 
-| | 🔒 Local (Lite) | ☁ GPU server (recommended) |
+| | 🔒 Local | ☁ GPU server (recommended) |
 |---|---|---|
 | **Privacy** | Audio never leaves your machine | Audio goes only to *your own* endpoint |
 | **Speed** | Slower (minutes on CPU) | Fastest (seconds–minutes) |
@@ -61,7 +61,7 @@ The flagship experience is the **personal GPU server** — fastest, and highest 
 | **Account** | None | Your own RunPod account |
 | **Best for** | Quick, private, offline use | Heavy lectures, English, best accuracy |
 
-> Local (Lite) itself has two levels — **"quality"** (more accurate, slower) and **"fast"** (quicker, lower accuracy) — chosen from the transcription-mode menu. Language (Hebrew / English / auto-detect) is a separate per-lecture choice, not a mode. See [Fast cloud mode](#-fast-cloud-mode-optional) to set up the GPU server.
+> Local mode itself has two levels — **"quality"** (more accurate, slower) and **"fast"** (quicker, lower accuracy) — chosen from the transcription-mode menu. Language (Hebrew / English / auto-detect) is a separate per-lecture choice, not a mode. See [Fast cloud mode](#-fast-cloud-mode-optional) to set up the GPU server.
 
 ## 📥 Installation (one-time)
 
@@ -77,7 +77,7 @@ That's it. From then on, just double-click the desktop icon. **No command line r
 
 ## 🚀 How to use
 
-1. **Get a lecture** — paste a direct link (YouTube / Moodle / any direct video link) and click **Download**, or download it yourself (e.g. with the Video DownloadHelper Chrome extension).
+1. **Get a lecture** — paste a direct link (YouTube / Moodle / any direct video link) and click **Download**, or download it yourself (e.g. with any browser video-download extension).
 2. **Open the app** — from the desktop icon, or from a browser bookmark pointing at `subsidekick://open` (the installer registers this link type automatically). It opens to the **home screen**.
 3. From home: **New transcription** → **drag or pick** a file (several at once is fine — they enter a **queue** that transcribes sequentially). Before uploading you can choose a **course** and the **lecture language** (Hebrew / English / auto-detect) → **Create subtitles** → **▶ Watch with subtitles**.
 

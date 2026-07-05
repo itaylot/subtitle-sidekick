@@ -13,6 +13,8 @@
 
 Built primarily for Hebrew lectures (using a Hebrew-specialized Whisper model), with English and auto-detect support. Point it at a recorded lecture — a local file or a link — and get an interactive player with searchable, editable, exportable subtitles.
 
+<p align="center"><img src="docs/demo.gif" alt="Subtitle Sidekick walkthrough" width="720" /></p>
+
 ---
 
 ## Table of contents

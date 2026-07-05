@@ -121,20 +121,30 @@
     }
     const id = (x) => doc().getElementById(x);
 
-    // fake player playback (no real video file in demo) — drive captions + progress from the cues
+    // fake player playback (no real video file in demo) — drive a self-contained caption overlay +
+    // transcript highlight from the cues. The overlay lives only in the demo (the real app renders
+    // captions via the native <track>), so the tour stays recordable without a real video source.
     function playFake(seconds) {
       const cues = win().__demoCues || [];
       const total = cues.length ? cues[cues.length - 1].end : 21;
+      const screen = doc().querySelector(".screen");
+      let cap = null;
+      if (screen) {
+        cap = doc().createElement("div");
+        cap.style.cssText = "position:absolute;z-index:5;bottom:48px;left:50%;transform:translateX(-50%);" +
+          "background:#fff8ec;color:#3a322b;font-size:15px;font-weight:500;line-height:1.5;padding:7px 16px;" +
+          "border-radius:10px;max-width:84%;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.25);";
+        screen.appendChild(cap);
+      }
       let t = 0; const step = 0.45;
       const rows = doc().querySelectorAll(".tc-row");
       const timer = setInterval(() => {
         t += step; if (t > total) t = 0;
         const ci = cues.findIndex((c) => t >= c.start && t <= c.end);
-        if (id("subline")) id("subline").textContent = ci >= 0 ? cues[ci].text : "";
-        if (id("pfill")) id("pfill").style.width = (t / total * 100) + "%";
+        if (cap) { cap.textContent = ci >= 0 ? cues[ci].text : ""; cap.style.display = cap.textContent ? "block" : "none"; }
         rows.forEach((r, i) => r.classList.toggle("cur", i === ci));
       }, 120);
-      return new Promise((r) => setTimeout(() => { clearInterval(timer); r(); }, seconds * 1000));
+      return new Promise((r) => setTimeout(() => { clearInterval(timer); if (cap) cap.remove(); r(); }, seconds * 1000));
     }
 
     async function run() {

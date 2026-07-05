@@ -176,25 +176,6 @@
         <div class="screen">
           <video id="video" preload="metadata"><track id="vtt" kind="subtitles" srclang="he" label="עברית" default></video>
           <button class="cc" id="ccToggle" title="הצג / הסתר כתוביות">CC</button>
-          <button class="exitfs" id="exitFs" title="יציאה ממסך מלא" hidden>✕ יציאה ממסך מלא</button>
-          <div class="subline" id="subline"></div>
-          <div class="ctrls">
-            <button class="play" id="playBtn">▶</button>
-            <button class="ovlbtn" id="skipBack" title="10 שניות אחורה">10⟲</button>
-            <button class="ovlbtn" id="skipFwd" title="10 שניות קדימה">⟳10</button>
-            <div class="track" id="track"><div class="pfill" id="pfill"></div></div>
-            <span class="tc" id="tc">0:00 / 0:00</span>
-            <select class="ovlbtn speedsel" id="speedSel" title="מהירות ניגון">
-              <option value="0.5">0.5x</option>
-              <option value="0.75">0.75x</option>
-              <option value="1" selected>1x</option>
-              <option value="1.25">1.25x</option>
-              <option value="1.5">1.5x</option>
-              <option value="1.75">1.75x</option>
-              <option value="2">2x</option>
-            </select>
-            <button class="ovlbtn" id="fsBtn" title="מסך מלא">⛶</button>
-          </div>
         </div>
 
         <!-- transcript panel: search · edit · export -->
@@ -228,6 +209,7 @@
 
         <div class="lib-detail" id="libDetail" hidden>
           <div class="lib-detail-head">
+            <button class="lib-detail-icon" id="libIconBtn" title="בחירת אייקון לקורס" hidden>📘</button>
             <div class="lib-detail-titlewrap">
               <div class="lib-detail-title" id="libDetailTitle"></div>
               <div class="lib-detail-count" id="libDetailCount"></div>
@@ -237,6 +219,23 @@
           </div>
           <input class="tc-search lib-detail-search" id="libDetailSearch" placeholder="🔎 חיפוש בקורס הזה…" />
           <div class="lib-detail-list" id="libDetailList"></div>
+
+          <!-- course page extras (named courses only): checklist + free-text notes -->
+          <div class="course-extras" id="courseExtras" hidden>
+            <div class="cx-block">
+              <div class="cx-label">משימות</div>
+              <div class="cx-tasks" id="courseTasks"></div>
+              <div class="cx-addrow">
+                <input class="urlin" id="courseTaskIn" placeholder="הוסיפו משימה…" />
+                <button class="urlbtn" id="courseTaskAdd">הוספה</button>
+              </div>
+            </div>
+            <div class="cx-block">
+              <div class="cx-label">הערות הקורס</div>
+              <textarea class="cx-notes" id="courseNotes" placeholder="סיכומים, תזכורות, קישורים…"></textarea>
+              <div class="cx-notestatus" id="courseNoteStatus"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -268,7 +267,7 @@
             <li>הכתוביות מסונכרנות לאודיו ונראות גם במסך מלא.</li>
             <li>כפתור <b>🅰 כתוביות</b> (למעלה בנגן) שולט על גודל ורקע הכתוביות — וגם בהגדרות.</li>
             <li>שליטה במהירות הניגון (0.5x–2x), דילוג 10 שניות, ומסך מלא.</li>
-            <li><b>"המשך מאיפה שעצרת"</b> במסך הבית מחזיר אתכם לנקודה האחרונה.</li>
+            <li><b>המשך צפייה:</b> פתיחה מחדש של הרצאה ממשיכה אוטומטית מהנקודה שבה עצרתם (וגם כרטיס "המשך מאיפה שעצרת" במסך הבית).</li>
           </ul>
 
           <h3>✏️ עריכה, חיפוש וייצוא</h3>
@@ -279,7 +278,8 @@
           </ul>
 
           <h3>📚 קורסים וארגון</h3>
-          <p>כל הרצאה נרשמת לתפריט הצד (☰), מאורגנת לפי קורסים. תפריט הפעולות (⋯) מאפשר שינוי שם, העברה לקורס אחר, פתיחה בדפדפן והסרה.</p>
+          <p>כל הרצאה נרשמת לתפריט הצד (☰), מאורגנת לפי קורסים. תפריט הפעולות (⋯) מאפשר שינוי שם, העברה לקורס אחר, פתיחה בדפדפן והסרה. כפתור ○/✓ מסמן הרצאה כנצפתה או לא-נצפתה.</p>
+          <p>ב<b>מסך הספרייה</b> (📚) יש עמוד לכל קורס: רשימת ההרצאות, <b>צ'ק-ליסט משימות</b>, ו<b>הערות</b> חופשיות לקורס — כדי לנהל את הלמידה ולא רק לצפות.</p>
 
           <h3>☁ הקמת שרת GPU (אופציונלי)</h3>
           <p>למצב הענן צריך endpoint אישי ב-RunPod. ההוראות המלאות נמצאות בקובץ ה-README של הפרויקט. אין שרת משותף — הפרטים נשמרים רק במחשב הזה.</p>

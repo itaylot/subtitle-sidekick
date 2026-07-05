@@ -68,6 +68,9 @@ if hasattr(threading, "excepthook"):
 # (cross-origin). This small server streams any local file by absolute path with Range support
 # so the video element can seek.
 _media_port = None
+# random per-launch token — without it, ACAO:* let any local webpage read arbitrary files via this
+# server. media_url() appends it and the handler rejects requests that don't carry it. (SEC-1)
+_media_token = None
 
 
 class _MediaHandler(http.server.BaseHTTPRequestHandler):
@@ -76,6 +79,9 @@ class _MediaHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        if params.get("t", [""])[0] != _media_token:   # reject anything without the launch token
+            self.send_error(403)
+            return
         path = urllib.parse.unquote(params.get("p", [""])[0])
         if not path or not os.path.isfile(path):
             self.send_error(404)
@@ -95,7 +101,6 @@ class _MediaHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Accept-Ranges", "bytes")
             self.send_header("Content-Length", str(length))
-            self.send_header("Access-Control-Allow-Origin", "*")
             if rng:
                 self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
             self.end_headers()
@@ -114,12 +119,34 @@ class _MediaHandler(http.server.BaseHTTPRequestHandler):
 
 
 def _start_media_server():
-    global _media_port
+    global _media_port, _media_token
+    import secrets
+    _media_token = secrets.token_urlsafe(16)
     httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _MediaHandler)
     httpd.daemon_threads = True
     _media_port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     _log("media server on port %s" % _media_port)
+
+
+def _friendly_error(msg):
+    """Turn a raw (often English) exception string into a Hebrew, actionable message for the user.
+    The raw text is still written to crash.log by the caller — this only affects what's shown."""
+    m = str(msg or "")
+    low = m.lower()
+    # already Hebrew (our own raised messages) — pass through unchanged
+    if any("֐" <= ch <= "ת" for ch in m):
+        return m
+    if any(k in low for k in ("401", "unauthorized", "api key", "forbidden", "403")):
+        return "בעיית אימות מול השרת — בדקו את מפתח ה-API בהגדרות."
+    if any(k in low for k in ("connection", "timeout", "timed out", "resolve", "network",
+                              "urlerror", "getaddrinfo", "unreachable", "ssl")):
+        return "בעיית רשת — בדקו את חיבור האינטרנט ואת כתובת השרת."
+    if any(k in low for k in ("no space", "errno 28", "disk full", "not enough space")):
+        return "אין מספיק מקום בדיסק — פנו מקום ונסו שוב."
+    if any(k in low for k in ("permission", "errno 13", "access is denied", "being used by another")):
+        return "אין הרשאת גישה לקובץ — ודאו שהוא אינו פתוח בתוכנה אחרת ונסו שוב."
+    return "אירעה שגיאה בתמלול. הפרטים נשמרו ב-crash.log."
 
 
 class Api:
@@ -149,17 +176,22 @@ class Api:
         threading.Thread(target=self._download, args=(url,), daemon=True).start()
 
     def _download(self, url):
+        # log only the hostname, never the full URL — query strings can carry session tokens (PRIV-1)
+        try:
+            host = urllib.parse.urlparse(url).hostname or "?"
+        except Exception:  # noqa: BLE001
+            host = "?"
         try:
             path = engine.download(url, on_progress=lambda p: self._js("window.onDownload", p))
             if path:
                 _log("DOWNLOAD OK: " + str(path))
                 self._js("window.enqueueFiles", [path])
             else:
-                _log("DOWNLOAD returned no path for: " + str(url))
+                _log("DOWNLOAD returned no path (host=%s)" % host)
                 self._js("window.onError", "ההורדה נכשלה — בדוק את הקישור")
         except Exception as e:  # noqa: BLE001
             _log("DOWNLOAD ERR: " + traceback.format_exc())
-            self._js("window.onError", "הורדה נכשלה: " + str(e))
+            self._js("window.onError", "הורדה נכשלה — " + _friendly_error(e))
 
     # start transcription (non-blocking). Local runs in a killable subprocess; cloud in a thread.
     def start(self, path, fast, course="", cloud_cfg=None, language="he"):
@@ -252,7 +284,7 @@ class Api:
                 self._js("window.onCancelled", None)  # killed before SRT was written — nothing to clean up
             elif error is not None:
                 _log("TRANSCRIBE ERR (worker): " + str(error))
-                self._js("window.onError", str(error))
+                self._js("window.onError", _friendly_error(error))
             elif result is not None:
                 self._finish(result, course)
             else:
@@ -278,7 +310,7 @@ class Api:
                 self._js("window.onCancelled", None)
             else:
                 _log("TRANSCRIBE ERR: " + traceback.format_exc())
-                self._js("window.onError", str(e))
+                self._js("window.onError", _friendly_error(e))
 
     # log JS errors to crash.log for diagnostics
     def log(self, msg):
@@ -288,7 +320,8 @@ class Api:
     def media_url(self, path):
         if not _media_port or not path:
             return ""
-        return "http://127.0.0.1:%s/?p=%s" % (_media_port, urllib.parse.quote(os.path.abspath(path)))
+        return "http://127.0.0.1:%s/?t=%s&p=%s" % (
+            _media_port, _media_token, urllib.parse.quote(os.path.abspath(path)))
 
     # ── window buttons (the colored dots) ──
     def win_close(self):
@@ -327,6 +360,9 @@ class Api:
     def rename_course(self, old, new):
         return engine.rename_course(old, new)
 
+    def save_course_meta(self, name, meta):
+        return engine.save_course_meta(name, meta)
+
     def set_lecture_course(self, video, course):
         return engine.move_lecture(video, course)   # actually relocates the files, not just the label
 
@@ -335,6 +371,16 @@ class Api:
 
     def open_lecture(self, video):
         return engine.open_lecture(video)
+
+    def set_viewed(self, video, viewed):
+        return engine.set_viewed(video, viewed)
+
+    # playback resume — persisted in Python (localStorage doesn't survive pywebview restarts)
+    def get_resume(self):
+        return engine.load_resume()
+
+    def save_resume(self, video, pos, dur=0):
+        return engine.save_resume(video, pos, dur)
 
     # ── personal correction dictionary ──
     def get_dictionary(self):
@@ -454,8 +500,35 @@ def main():
     )
     api._window = window
     window.events.loaded += lambda: _register_drop(window)
+    # open filling the screen instead of a small floating window ("window-in-a-window")
+    window.events.loaded += lambda: _safe_maximize(window)
     webview.start(debug=False, icon=ICON)
 
 
+def _safe_maximize(window):
+    try:
+        window.maximize()
+    except Exception as e:  # noqa: BLE001 — not fatal; just opens at the default size
+        _log("maximize: " + str(e))
+
+
+def _selftest():
+    # version comparison must be numeric, not lexicographic (the classic "1.10" < "1.9" bug)
+    assert _version_tuple("1.10") > _version_tuple("1.9"), "1.10 should be newer than 1.9"
+    assert _version_tuple("1.2.0") == (1, 2, 0)
+    assert _version_tuple("2.0") > _version_tuple("1.99")
+    assert not (_version_tuple("1.0.0") > _version_tuple("1.0.0"))
+    # SRT timestamp formatting
+    assert engine.fmt_time(0) == "00:00:00,000", engine.fmt_time(0)
+    assert engine.fmt_time(3661.5) == "01:01:01,500", engine.fmt_time(3661.5)
+    # error mapping stays Hebrew and routes by class
+    assert "רשת" in _friendly_error("Connection timed out")
+    assert _friendly_error("שגיאה שלי") == "שגיאה שלי"
+    print("app self-check OK")
+
+
 if __name__ == "__main__":
-    main()
+    if "--selftest" in sys.argv:
+        _selftest()
+    else:
+        main()

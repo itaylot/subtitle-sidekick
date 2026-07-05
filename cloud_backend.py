@@ -168,6 +168,8 @@ def transcribe_remote(video_path, endpoint_url, api_key, on_progress=None, cance
             on_progress(kw)
 
     abort = threading.Event()   # trips on cancel OR on the first chunk error, so siblings stop fast
+    job_ids = []                # RunPod ids of submitted chunks — cancelled server-side on abort
+    ids_lock = threading.Lock()
 
     def bail():
         if abort.is_set() or (cancel_check and cancel_check()):
@@ -200,6 +202,8 @@ def transcribe_remote(video_path, endpoint_url, api_key, on_progress=None, cance
     def work(start, end):
         bail()
         job_id = _submit(base, headers, _encode_b64(pcm[start:end]), language)
+        with ids_lock:
+            job_ids.append(job_id)
         return _poll(base, headers, job_id, lambda **k: None, bail)
 
     results = [None] * total
@@ -217,6 +221,9 @@ def transcribe_remote(video_path, endpoint_url, api_key, on_progress=None, cance
                      elapsed=elapsed, chunk=done, chunks=total)
         except BaseException:
             abort.set()          # let the other in-flight polls unwind instead of running to MAX_WAIT
+            with ids_lock:
+                pending = list(job_ids)
+            _cancel_jobs(base, headers, pending)   # stop RunPod billing for jobs still running server-side
             raise
 
     cues = []
@@ -263,6 +270,16 @@ def _submit(base, headers, audio_b64, language="he"):
     if not job_id:
         raise RuntimeError("השרת לא החזיר מזהה עבודה (id).")
     return job_id
+
+
+def _cancel_jobs(base, headers, job_ids):
+    """Fire-and-forget POST /cancel/<id> for each submitted chunk so a cancelled/failed run stops
+    billing on RunPod instead of finishing in the background. Best-effort — errors are ignored."""
+    for jid in job_ids:
+        try:
+            requests.post(base + "/cancel/" + jid, headers=headers, timeout=10)
+        except Exception:  # noqa: BLE001 — cancellation is best-effort; a stuck job is not fatal here
+            pass
 
 
 def _poll(base, headers, job_id, emit, bail=None):

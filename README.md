@@ -3,7 +3,7 @@
 # 🎬 Subtitle Sidekick — lecture transcription & synced subtitles
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.12-blue" alt="Python 3.12" />
+  <img src="https://img.shields.io/badge/Python-3.11%20%7C%203.12-blue" alt="Python 3.11 or 3.12" />
   <img src="https://img.shields.io/badge/Whisper-ivrit--ai-c56a43" alt="ivrit-ai Whisper" />
   <img src="https://img.shields.io/badge/Local--first-privacy-5f9e7a" alt="Local-first" />
   <img src="https://img.shields.io/badge/Windows-desktop-c59a3f" alt="Windows desktop" />
@@ -177,6 +177,8 @@ Local mode (the default): everything runs on your machine — audio never leaves
 
 Server mode (optional, only when deliberately enabled): audio is uploaded only to the RunPod endpoint **you create on your own account**. The app ships with no server and no embedded credentials — the prebuilt image is just the transcription code, running on your own infrastructure.
 
+Downloading from a login-protected source (e.g. Moodle) reads your browser cookies locally (`cookiesfrombrowser`) so the download is authorized as you — the cookies stay on your machine and are never sent anywhere except the site you're downloading from.
+
 ---
 
 ## 🛠️ Engineering challenges solved
@@ -199,8 +201,15 @@ Server mode (optional, only when deliberately enabled): audio is uploaded only t
 <details>
 <summary>Direct file → SRT transcription (for VLC or any player)</summary>
 
+```bat
+:: Windows
+py -3.12 -m venv .venv && .venv\Scripts\activate
+pip install -r requirements.txt
+python tools\transcribe_to_srt.py "lecture.mp4"      :: produces lecture.srt
+```
 ```bash
-py -3.12 -m venv .venv && .venv\Scripts\activate    # macOS/Linux: python3.12 -m venv .venv && source .venv/bin/activate
+# macOS / Linux
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python tools/transcribe_to_srt.py "lecture.mp4"      # produces lecture.srt
 ```
@@ -231,6 +240,20 @@ runpod_server/              the server code (Docker image) for the optional fast
   handler.py                the transcription function that runs on the server (Hebrew + general model for English)
   Dockerfile                builds the image (bakes the transcription models in)
 ```
+
+---
+
+## 📜 License & credits
+
+Released under the [MIT License](LICENSE).
+
+Built on excellent open-source work:
+
+- [**ivrit-ai**](https://huggingface.co/ivrit-ai) — the Hebrew Whisper model that makes accurate Hebrew transcription possible.
+- [**OpenAI Whisper**](https://github.com/openai/whisper) — the underlying speech-recognition model.
+- [**faster-whisper**](https://github.com/SYSTRAN/faster-whisper) (CTranslate2) — fast local inference.
+- [**yt-dlp**](https://github.com/yt-dlp/yt-dlp) — downloading lectures from a link.
+- [**pywebview**](https://pywebview.flowrl.com/) — the desktop window rendering the UI.
 
 ---
 

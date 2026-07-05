@@ -1,6 +1,6 @@
-# תלויות האפליקציה (Python 3.11/3.12)
-faster-whisper      # מנוע התמלול (מושך numpy/ctranslate2 וכו' לבד)
-pywebview           # חלון שמרנדר את ה-UI (HTML/CSS) עם bridge ל-Python
-python-docx         # ייצוא תמליל ל-Word
-yt-dlp              # הורדת וידאו מקישור (YouTube / Moodle / HLS)
-requests            # תקשורת עם שרת תמלול בענן (מצב "שרת מהיר" — אופציונלי)
+# תלויות האפליקציה (Python 3.11/3.12) — נעוצות לגרסאות שנבדקו ועובדות
+faster-whisper==1.2.1   # מנוע התמלול (מושך numpy/ctranslate2/av לבד)
+pywebview==6.2.1        # חלון שמרנדר את ה-UI (HTML/CSS) עם bridge ל-Python
+python-docx==1.2.0      # ייצוא תמליל ל-Word
+requests==2.34.2        # תקשורת עם שרת תמלול בענן (מצב "שרת מהיר" — אופציונלי)
+yt-dlp>=2026.6.9        # הורדת וידאו מקישור — מכוון: >= כי הוא נשבר כש-YouTube משתנה, צריך לעדכן

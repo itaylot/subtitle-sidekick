@@ -84,25 +84,23 @@ body {
   background-image: radial-gradient(var(--dots) 1.5px, transparent 1.5px);
   background-size: 21px 21px;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  padding: 30px;
+  padding: 0;
   user-select: none;
 }
-@media (max-height: 700px) { body { padding: 14px; } }
 
-/* ── app window (card) — capped to screen height, inner content scrolls if needed ── */
+/* ── app shell — fills the whole window (no floating "card-on-board"); inner content
+   is capped for readability so it doesn't stretch edge-to-edge on wide monitors ── */
 .win {
   width: 100%;
-  max-width: 720px;   /* wider than before so large windows aren't mostly empty margin */
-  max-height: 100%;
+  max-width: 1000px;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--atmos), var(--card);   /* atmospheric depth behind all screens */
-  border: 1px solid var(--line);
-  border-radius: 22px;
+  border-inline: 1px solid var(--line);
   overflow: hidden;
-  box-shadow: var(--win-shadow);
 }
 
 /* ── title bar ── */
@@ -126,14 +124,6 @@ body {
   color: var(--text); padding: 2px 4px; line-height: 1; flex: none;
 }
 .homebtn:hover { color: var(--accent); }
-.homeic { width: 20px; height: 20px; display: block; opacity: 0.85; }
-.homebtn:hover .homeic { opacity: 1; }
-.dark .homeic { filter: invert(1); }
-.appic {
-  width: 20px; height: 20px;
-  border-radius: 7px;
-  object-fit: cover; flex: none;
-}
 .appname { font-size: 13.5px; font-weight: 600; }
 .jobpill {
   display: flex; align-items: center; gap: 5px;
@@ -191,6 +181,21 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
   color: var(--muted); margin-bottom: 18px;
 }
 .view[hidden] { display: none; }
+
+/* page-transition: fade+rise each time a view becomes visible (pure CSS, no JS timing) */
+.view:not([hidden]) { animation: viewIn var(--dur) var(--ease); }
+@keyframes viewIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .view:not([hidden]) { animation: none; } }
+
+/* mark-watched toggle on lecture rows */
+.lec-seen {
+  background: none; border: 1px solid var(--line); border-radius: 999px;
+  width: 22px; height: 22px; flex: none; cursor: pointer; line-height: 1;
+  color: var(--muted); font-size: 12px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.lec-seen:hover { color: var(--accent); border-color: var(--accent); }
+.lec-seen.on { color: #fff; background: var(--c2); border-color: var(--c2); }
 
 /* keyboard-only focus ring (accessibility) — doesn't show on mouse clicks */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
@@ -405,19 +410,6 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
   display: flex; align-items: center; justify-content: space-between;
   margin-top: 22px;
 }
-.fast { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 500; cursor: pointer; }
-.sw {
-  width: 36px; height: 21px; border-radius: 11px;
-  background: var(--line); position: relative; flex: none;
-  transition: background 0.15s;
-}
-.sw.on { background: var(--c2); }
-.knob {
-  width: 17px; height: 17px; border-radius: 50%;
-  background: #fff; position: absolute; top: 2px; right: 2px;
-  transition: right 0.15s;
-}
-.sw.on .knob { right: 17px; }
 .priv { font-size: 12px; color: var(--c2); }
 
 /* ── transcription mode selector ── */
@@ -630,6 +622,50 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
 .lec-missing { opacity: 0.55; cursor: default; }
 .lec-missing:hover { background: none; }
 .courses-empty { font-size: 12.5px; color: var(--muted); text-align: center; padding: 24px 8px; }
+
+/* ── course icons + emoji picker ── */
+.course-ic { font-size: 15px; margin-inline-end: 2px; flex: none; }
+.libcard-ic { font-size: 26px; margin-bottom: 6px; }
+.lib-detail-icon {
+  flex: none; width: 40px; height: 40px; font-size: 22px; line-height: 1;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
+  cursor: pointer; margin-inline-end: 10px;
+}
+.lib-detail-icon:hover { border-color: var(--accent); }
+.iconpicker { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; padding: 8px; }
+.ip-opt {
+  width: 34px; height: 34px; font-size: 19px; line-height: 1; border: none;
+  background: none; border-radius: 8px; cursor: pointer;
+}
+.ip-opt:hover { background: var(--panel); }
+
+/* ── course page extras: checklist + notes ── */
+.course-extras { margin-top: 20px; display: flex; flex-direction: column; gap: 18px; }
+.cx-block { border-top: 1px solid var(--line); padding-top: 14px; }
+.cx-label { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.cx-empty { font-size: 12.5px; color: var(--muted); padding: 4px 2px 10px; }
+.cx-task { display: flex; align-items: center; gap: 9px; padding: 5px 2px; font-size: 13px; }
+.cx-task.done .cx-tasktext { text-decoration: line-through; color: var(--muted); }
+.cx-check {
+  flex: none; width: 20px; height: 20px; border: 1.5px solid var(--line); border-radius: 6px;
+  background: none; cursor: pointer; color: #fff; font-size: 12px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.cx-task.done .cx-check { background: var(--c2); border-color: var(--c2); }
+.cx-tasktext { flex: 1; }
+.cx-taskdel { flex: none; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; opacity: 0; }
+.cx-task:hover .cx-taskdel { opacity: 1; }
+.cx-taskdel:hover { color: var(--accent); }
+.cx-addrow { display: flex; gap: 8px; margin-top: 8px; }
+.cx-addrow .urlin { flex: 1; }
+.cx-notes {
+  width: 100%; min-height: 120px; resize: vertical; box-sizing: border-box;
+  font-family: inherit; font-size: 13px; line-height: 1.6; color: var(--text);
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 12px 14px; direction: rtl;
+}
+.cx-notes:focus { outline: none; border-color: var(--accent); }
+.cx-notestatus { font-size: 11px; color: var(--muted); margin-top: 6px; height: 14px; }
 
 /* ── ⋯ kebab button — in lecture rows and player screen ── */
 .kebab {
@@ -860,21 +896,7 @@ body.demo-mode .screen video { background: transparent; }
   letter-spacing: 0.05em; padding: 3px 8px; border-radius: 6px; border: none;
 }
 .cc.off { background: rgba(0, 0, 0, 0.45); }   /* captions hidden */
-.subline {
-  position: absolute; z-index: 2; bottom: 62px; left: 50%; transform: translateX(-50%);
-  background: #fff8ec; color: #3a322b;
-  font-size: 14.5px; font-weight: 500; line-height: 1.5;
-  padding: 7px 16px; border-radius: 10px; max-width: 84%;
-  text-align: center; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-  /* defensive: even if a stray long cue slips through, wrap it and cap height instead of clipping */
-  overflow-wrap: anywhere; max-height: 40%; overflow: hidden;
-}
-.subline:empty { display: none; }
 
-/* native player: hide our custom control bar AND our custom caption div — the browser renders
-   captions from the <track> element itself, which stays visible in the native fullscreen too. */
-.native-player .ctrls { display: none; }
-.native-player .subline { display: none; }
 /* native caption (::cue) appearance — controlled from Settings via body data-attributes */
 video::cue { line-height: 1.5; font-size: 1em; background: rgba(0, 0, 0, 0.75); color: #fff; }
 body[data-sub-size="sm"] video::cue { font-size: 0.8em; }
@@ -884,63 +906,11 @@ body[data-sub-bg="dark"]  video::cue { background: rgba(0, 0, 0, 0.75); color: #
 body[data-sub-bg="light"] video::cue { background: rgba(255, 248, 236, 0.94); color: #3a322b; }
 body[data-sub-bg="none"]  video::cue { background: transparent; color: #fff; text-shadow: 0 1px 4px #000, 0 0 3px #000; }
 
-/* playback controls — part of .screen so they stay visible in fullscreen */
-.ctrls {
-  position: absolute; bottom: 0; left: 0; right: 0; z-index: 2;
-  display: flex; align-items: center; gap: 8px;
-  padding: 16px 14px 12px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
-}
-.play {
-  width: 38px; height: 38px; border-radius: 50%;
-  background: var(--accent); color: #fff; border: none;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; cursor: pointer; flex: none;
-  box-shadow: 0 5px 16px rgba(197, 106, 67, 0.32);
-}
-.track { flex: 1; height: 7px; border-radius: 5px; background: rgba(255, 255, 255, 0.28); position: relative; overflow: hidden; cursor: pointer; }
-.pfill { position: absolute; top: 0; right: 0; height: 100%; width: 0; background: var(--accent); border-radius: 5px; }
-.tc {
-  font-size: 11.5px; color: #fff; flex: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
-}
-.ovlbtn {
-  flex: none; background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #fff; border-radius: 8px; height: 30px; padding: 0 9px;
-  font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.ovlbtn:hover { background: rgba(255, 255, 255, 0.26); }
-.speedsel {
-  font-family: inherit; cursor: pointer; direction: ltr; text-align: center;
-  -webkit-appearance: none; appearance: none;
-}
-.speedsel:hover { background: rgba(255, 255, 255, 0.26); }
-.speedsel option { color: #2a221b; }
-
-.screen:fullscreen .subline { font-size: 26px; bottom: 96px; max-width: 80%; }
-.screen:fullscreen .ctrls { padding: 22px 26px 20px; gap: 12px; }
-.screen:fullscreen .play { width: 50px; height: 50px; font-size: 17px; }
-.screen:fullscreen .ovlbtn { height: 38px; font-size: 14px; padding: 0 13px; }
-.screen:fullscreen .tc { font-size: 14px; }
 .play-head { display: flex; align-items: center; gap: 6px; margin: 6px 0 22px; }
 .play-title {
   flex: 1; font-family: "Frank Ruhl Libre", serif; font-size: 19px; font-weight: 700;
   text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-
-/* fullscreen: overlay stays part of the container so subtitles and controls remain visible */
-.screen:fullscreen { height: 100%; width: 100%; border-radius: 0; }
-.screen:-webkit-full-screen { height: 100%; width: 100%; }
-
-/* exit fullscreen button — visible only inside fullscreen; not everyone remembers ESC */
-.exitfs {
-  position: absolute; top: 12px; left: 12px; z-index: 3;
-  background: rgba(20, 14, 8, 0.55); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px; padding: 7px 14px; font-family: inherit; font-size: 12.5px;
-  font-weight: 600; cursor: pointer;
-}
-.exitfs[hidden] { display: none; }
-.exitfs:hover { background: rgba(20, 14, 8, 0.75); }
 
 /* ── transcript panel (search · edit · export) ── */
 .transcript { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }

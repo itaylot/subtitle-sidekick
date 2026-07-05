@@ -180,6 +180,7 @@ def load_library():
         data = {}
     data.setdefault("courses", [])
     data.setdefault("lectures", [])
+    data.setdefault("course_meta", {})   # {courseName: {notes, tasks:[{text,done}]}} — checklist + notes per course
     # mark lectures whose video is unreachable right now instead of dropping them — a disconnected
     # drive or a paused OneDrive must not erase the catalog. Display-only flag, recomputed on
     # every load (the persisted value is never trusted).
@@ -342,6 +343,32 @@ def reapply_dictionary_library():
 
 # ── transcription queue: persisted jobs so the queue survives app restarts/crashes ──
 QUEUE_PATH = os.path.join(LIB_DIR, "queue.json")
+RESUME_PATH = os.path.join(LIB_DIR, "resume.json")
+
+
+def load_resume():
+    """Playback positions persisted in Python (localStorage isn't reliable across pywebview restarts).
+    Returns {"last": <video>, "positions": {video: {pos, dur}}}."""
+    try:
+        with open(RESUME_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, ValueError, OSError):
+        data = {}
+    data.setdefault("last", "")
+    data.setdefault("positions", {})
+    return data
+
+
+def save_resume(video, pos, dur=0):
+    """Remember where the user stopped in a lecture, and which lecture was last open."""
+    video = os.path.abspath(video) if video else ""
+    if not video:
+        return load_resume()
+    data = load_resume()
+    data["positions"][video] = {"pos": float(pos or 0), "dur": float(dur or 0)}
+    data["last"] = video
+    _write_json_atomic(RESUME_PATH, data)
+    return data
 
 
 def library_dir():
@@ -447,6 +474,26 @@ def remove_course(name):
     for l in data["lectures"]:
         if l.get("course") == name:
             l["course"] = ""
+    data.get("course_meta", {}).pop(name, None)   # drop its checklist/notes too
+    return save_library(data)
+
+
+def save_course_meta(name, meta):
+    """Store a course's checklist + notes. meta = {notes, tasks:[{text,done}]}. Named courses only."""
+    name = (name or "").strip()
+    if not name:
+        return load_library()
+    data = load_library()
+    cm = data.setdefault("course_meta", {})
+    cur = cm.get(name, {})
+    if meta.get("icon") is not None:
+        cur["icon"] = str(meta["icon"])[:8]   # a single emoji; capped so it can't be abused as a blob
+    if meta.get("notes") is not None:
+        cur["notes"] = str(meta["notes"])
+    if meta.get("tasks") is not None:
+        cur["tasks"] = [{"text": str(t.get("text", "")), "done": bool(t.get("done"))}
+                        for t in meta["tasks"] if str(t.get("text", "")).strip()]
+    cm[name] = cur
     return save_library(data)
 
 
@@ -493,6 +540,16 @@ def set_lecture_course(video, course):
     return save_library(data)
 
 
+def set_viewed(video, viewed):
+    """Manually mark a lecture watched/unwatched (the ✓/eye button)."""
+    video = os.path.abspath(video)
+    data = load_library()
+    for l in data["lectures"]:
+        if l.get("video") == video:
+            l["viewed"] = bool(viewed)
+    return save_library(data)
+
+
 def rename_lecture(video, title):
     """Change display name in the library (does not touch the file on disk — safe during playback)."""
     video = os.path.abspath(video)
@@ -528,6 +585,9 @@ def rename_course(old, new):
         except OSError:
             pass
     data["courses"] = [new if c == old else c for c in data["courses"]]
+    cm = data.get("course_meta", {})
+    if old in cm:                                   # carry the checklist/notes to the new name
+        cm[new] = cm.pop(old)
     for l in data["lectures"]:
         if l.get("course") == old:
             l["course"] = new
@@ -851,4 +911,15 @@ if __name__ == "__main__":
     _preserve_corrupt(p)                                         # a second corruption must not clobber
     assert os.path.exists(p + ".corrupt.1")
     shutil.rmtree(td, ignore_errors=True)
+
+    # course_meta: task sanitizing drops blanks and coerces the done flag
+    _lib = tempfile.mkdtemp()
+    _old_path, _old_dir = LIB_PATH, LIB_DIR
+    LIB_DIR, LIB_PATH = _lib, os.path.join(_lib, "library.json")
+    save_library({"courses": ["C"], "lectures": [], "course_meta": {}})
+    save_course_meta("C", {"tasks": [{"text": "a", "done": 1}, {"text": "  ", "done": False}], "notes": "n"})
+    _m = load_library()["course_meta"]["C"]
+    assert _m["notes"] == "n" and _m["tasks"] == [{"text": "a", "done": True}], _m
+    LIB_PATH, LIB_DIR = _old_path, _old_dir
+    shutil.rmtree(_lib, ignore_errors=True)
     print("engine self-check OK")

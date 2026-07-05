@@ -8,10 +8,8 @@ echo   (your transcribed lectures and settings are safe)
 echo ============================================================
 echo.
 
-REM 1) close the running app so its files can be replaced
-taskkill /IM pythonw.exe /F >nul 2>&1
-
-REM 2) download the latest code as a zip from GitHub
+REM 1) download the latest code as a zip from GitHub FIRST — only kill the app once we actually
+REM    have a good download, so a failed download can't leave the app closed for nothing.
 set "ZIP=%TEMP%\subsidekick-update.zip"
 set "EXDIR=%TEMP%\subsidekick-update"
 if exist "%EXDIR%" rmdir /s /q "%EXDIR%"
@@ -24,11 +22,29 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM 3) extract and copy over the current folder (code only; .venv, .git and user data untouched)
+REM 2) extract the download
 echo Installing update...
 powershell -NoProfile -Command "Expand-Archive -Path '%ZIP%' -DestinationPath '%EXDIR%' -Force"
+if errorlevel 1 (
+  echo.
+  echo Could not extract the update. Please try again.
+  pause
+  exit /b 1
+)
 for /d %%D in ("%EXDIR%\*") do set "SRC=%%D"
-robocopy "%SRC%" "%~dp0." /E /XD .venv .git /XF library.json settings.json queue.json dictionary.json /NFL /NDL /NJH /NJS >nul
+
+REM 3) now that the update is ready, close the running app so its files can be replaced
+taskkill /IM pythonw.exe /F >nul 2>&1
+
+REM 4) copy over the current folder (code only; .venv, .git and user data untouched)
+robocopy "%SRC%" "%~dp0." /E /XD .venv .git /XF library.json settings.json queue.json dictionary.json resume.json /NFL /NDL /NJH /NJS >nul
+REM robocopy exit codes below 8 are success (files copied / nothing to do); 8+ is a real failure
+if errorlevel 8 (
+  echo.
+  echo Copying the new files failed. Your app is unchanged - just relaunch it.
+  pause
+  exit /b 1
+)
 
 REM 4) refresh dependencies (in case requirements changed) and relaunch
 echo Updating dependencies...

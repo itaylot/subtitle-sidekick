@@ -30,13 +30,15 @@ function installDemoBridge() {
   const settings = { transcription_mode: "cloud", transcription_language: "he", subtitle_size: "md",
     subtitle_bg: "dark", library_dir: "C:\\הרצאות",
     cloud: { endpoint_url: "https://api.runpod.ai/v2/demo", api_key: "demo", price_per_hour: 0.39, total_seconds: 5400, total_cost: 0.59 } };
+  const course_meta = { "חדו\"א 2 - הרצאות": { notes: "לחזור על משפט לגראנז'", tasks: [{ text: "לפתור תרגיל 3", done: false }, { text: "לצפות בשיעור 5", done: true }] } };
+  const demoResume = { last: "demo/calc-05.mp4", positions: { "demo/calc-05.mp4": { pos: 8.5, dur: 21 } } };
   const ok = () => Promise.resolve(true);
   window.__demoCues = demoCues;   // the demo controller animates player playback from these
   window.pywebview = { api: {
     log: () => {},
     get_settings: () => Promise.resolve(settings),
     save_settings: (d) => { if (d && d.cloud) Object.assign(settings.cloud, d.cloud); Object.assign(settings, d || {}); return Promise.resolve(settings); },
-    library: () => Promise.resolve({ courses, lectures }),
+    library: () => Promise.resolve({ courses, lectures, course_meta }),
     load_queue: () => Promise.resolve([]), save_queue: ok,
     open_lecture: () => Promise.resolve({ video: "demo/calc-05.mp4", cues: demoCues, srt: "demo/calc-05.srt" }),
     media_url: () => Promise.resolve(""),
@@ -47,6 +49,12 @@ function installDemoBridge() {
     get_dictionary: () => Promise.resolve({ rules: [{ from: "פאי תורץ", to: "PyTorch" }, { from: "ניורל נטוורק", to: "Neural Network" }] }),
     save_dictionary: (r) => Promise.resolve({ rules: r }), reapply_dictionary: () => Promise.resolve(3),
     apply_dictionary_to_cues: (c) => Promise.resolve(c),
+    set_viewed: (v, b) => { const l = lectures.find((x) => x.video === v); if (l) l.viewed = b; return ok(); },
+    get_resume: () => Promise.resolve(demoResume),
+    save_resume: (v, pos, dur) => { demoResume.positions[v] = { pos, dur }; demoResume.last = v; return Promise.resolve(demoResume); },
+    save_course_meta: (name, meta) => { const c = course_meta[name] = course_meta[name] || { notes: "", tasks: [] };
+      if (meta.icon != null) c.icon = meta.icon; if (meta.notes != null) c.notes = meta.notes; if (meta.tasks != null) c.tasks = meta.tasks;
+      return Promise.resolve({ courses, lectures, course_meta }); },
     create_course: ok, set_lecture_course: ok, rename_lecture: ok, remove_lecture: ok, remove_course: ok,
     rename_course: ok, save_srt: ok, export: () => Promise.resolve("demo.txt"),
     pick_file: () => Promise.resolve("C:\\הרצאות\\חדוא 2 — שיעור 6.mp4"),
@@ -194,6 +202,10 @@ $("updateCheckBtn").addEventListener("click", async () => {
   }
 });
 $("updateNowBtn").addEventListener("click", async () => {
+  if (processing) {   // updating restarts the app — never do it mid-transcription (DIST-3)
+    $("updateStatus").textContent = "יש תמלול פעיל — המתינו לסיומו לפני העדכון.";
+    return;
+  }
   const ok = await confirmModal({
     title: "עדכון לגרסה האחרונה",
     body: "האפליקציה תיסגר, תוריד ותתקין את הגרסה החדשה, ותיפתח מחדש אוטומטית (כדקה). ההרצאות וההגדרות שלכם לא מושפעות.",
@@ -351,13 +363,25 @@ window.addEventListener("pywebviewready", () => {
     applyPrivNote();
   }).catch(() => {});
 
+  // load persisted playback positions before the home renders, so "continue watching" shows up
+  window.pywebview.api.get_resume()
+    .then((r) => { if (r && r.positions) resumeData = r; })
+    .catch(() => {})
+    .finally(() => refreshHome());
+
   refreshHome();   // populate the dashboard immediately on launch (not only after clicking 'home')
 
   // crash recovery: resume any queue left over from a previous run (runs in background)
   Promise.resolve(refreshLibrary()).finally(() => {
     window.pywebview.api.load_queue().then((jobs) => {
       if (!Array.isArray(jobs) || !jobs.length) return;
-      queue = jobs.map((j) => ({ ...j, name: j.name || j.sourcePath.split(/[\\/]/).pop(), res: null }));
+      // merge, don't overwrite: files enqueued before this async load resolves must survive (STAB-5)
+      const have = new Set(queue.map((q) => q.sourcePath));
+      const restored = jobs
+        .filter((j) => j && j.sourcePath && !have.has(j.sourcePath))
+        .map((j) => ({ ...j, name: j.name || j.sourcePath.split(/[\\/]/).pop(), res: null }));
+      if (!restored.length) return;
+      queue = restored.concat(queue);   // restored (older) first, keep any live additions after
       renderQueue();
       if (!processing) processNext();
     }).catch(() => {});
@@ -433,6 +457,12 @@ function saveQueueSoon() {
     try { window.pywebview.api.save_queue(serializeQueue()); } catch (e) {}
   }, 300);
 }
+// immediate, un-debounced save — used at status transitions (running/done/failed) so a fast
+// app close can't lose a "done" flag and re-transcribe a finished lecture on next launch (STAB-3).
+function saveQueueNow() {
+  clearTimeout(_saveTimer);
+  try { window.pywebview.api.save_queue(serializeQueue()); } catch (e) {}
+}
 
 // ── queue ──
 window.enqueueFiles = function (paths) {
@@ -458,7 +488,17 @@ window.enqueueFiles = function (paths) {
   if (!processing) processNext();
 };
 
+let _starting = false;   // guards processNext across its await, so two triggers can't start two jobs (STAB-2)
 async function processNext() {
+  if (_starting) return;
+  _starting = true;
+  try {
+    return await _processNext();
+  } finally {
+    _starting = false;
+  }
+}
+async function _processNext() {
   const item = queue.find((q) => q.status === "queued");
   if (!item) {
     processing = false;
@@ -496,7 +536,7 @@ async function processNext() {
   $("watchDone").hidden = true;
   updateJobPill(0);
   item.status = "running";
-  saveQueueSoon();
+  saveQueueNow();   // persist the running-state immediately (STAB-3)
   const idx = queue.filter((q) => q.status === "done").length + 1;
   $("procName").textContent = (queue.length > 1 ? `(${idx}/${queue.length}) ` : "") + item.name;
   showProcMeta($("modeSel").value, item.language);
@@ -506,7 +546,9 @@ async function processNext() {
   startProcTips();               // rotating learning tips while the job runs
   setJobCtrl(true, !!cloudCfg);  // local: pause+cancel; cloud: cancel only (can't pause a remote job)
   const lang = item.language == null ? "he" : item.language;   // "" = auto; undefined (old items) → he
-  window.pywebview.api.start(item.sourcePath, fast, item.courseName || "", cloudCfg, lang);
+  // catch a rejected bridge call so a failed start surfaces as an error instead of freezing the queue (STAB-4)
+  Promise.resolve(window.pywebview.api.start(item.sourcePath, fast, item.courseName || "", cloudCfg, lang))
+    .catch((err) => window.onError("שגיאה בהפעלת התמלול: " + err));
 }
 
 // ── pause / cancel controls for the running job ──
@@ -528,11 +570,12 @@ $("pauseBtn").addEventListener("click", () => {
   }
 });
 let cancelling = false;
-$("cancelBtn").addEventListener("click", () => {
-  const ok = confirm(
-    "לבטל את התמלול הנוכחי?\n\n" +
-    "ההתקדמות עד כה תימחק ולא תישמר — תצטרכו להתחיל את ההרצאה הזו מחדש. " +
-    "שאר ההרצאות בתור ימשיכו כרגיל.");
+$("cancelBtn").addEventListener("click", async () => {
+  const ok = await confirmModal({
+    title: "ביטול התמלול הנוכחי",
+    body: "ההתקדמות עד כה תימחק ולא תישמר — תצטרכו להתחיל את ההרצאה הזו מחדש. שאר ההרצאות בתור ימשיכו כרגיל.",
+    buttons: [{ label: "בטל את התמלול", value: "cancel", danger: true }],
+  });
   if (!ok) return;
   cancelling = true;                       // suppress further progress + show immediate feedback
   stopSmooth();
@@ -768,7 +811,7 @@ window.onProgress = function (p) {
     $("pct").textContent = "";
     $("eta").textContent = p.device === "cloud"
       ? "מכין ומעלה את האודיו לשרת… (בהרצה ראשונה השרת מתעורר — עד דקה)"
-      : "מאתחל את מנוע התמלול… (בהרצה הראשונה בלבד יורד המודל פעם אחת — זה החלק הארוך)";
+      : "מאתחל את מנוע התמלול… (בהרצה הראשונה בלבד יורד המודל פעם אחת, כ-1.5GB — זה החלק הארוך)";
     return;
   }
   $("bar2").classList.remove("loading");
@@ -835,7 +878,7 @@ window.onDone = function (res) {
     }
   }
   renderQueue();
-  saveQueueSoon();
+  saveQueueNow();    // persist the done-state immediately so a fast close can't re-run it (STAB-3)
   refreshLibrary();  // lecture registered in library — refresh sidebar
   processNext();     // show finish screen + "play subtitles" button
 };
@@ -861,7 +904,7 @@ window.onError = function (msg) {
   if (cur) { cur.status = "failed"; cur.error = lastError; }
   $("bar2").classList.remove("loading");
   renderQueue();
-  saveQueueSoon();
+  saveQueueNow();   // persist the failed-state immediately (STAB-3)
   processNext();  // decides whether to show "ready" or "failed" based on queue state
 };
 
@@ -887,19 +930,11 @@ window.onCancelled = function () {
 };
 
 // ── player ──
+// We use the browser's built-in <video controls> (seek / speed / fullscreen) — battle-tested and
+// visible in native fullscreen. The Hebrew captions come from the <track> VTT; the transcript
+// highlight + resume are driven by the 'timeupdate' event below.
 const video = $("video");
-const screenEl = document.querySelector(".screen");
-
-// ── player engine toggle ──────────────────────────────────────────────────
-// NATIVE_PLAYER=true uses the browser's built-in, battle-tested video controls (seek/speed/
-// fullscreen) and hides our hand-rolled control bar. Set to false to fall back to the old
-// custom controls. The Hebrew caption line + transcript panel work the same in both modes,
-// since they're driven by the <video> 'timeupdate' event either way.
-const NATIVE_PLAYER = true;
-if (NATIVE_PLAYER) {
-  video.setAttribute("controls", "");
-  document.body.classList.add("native-player");
-}
+video.setAttribute("controls", "");
 
 // Native WebVTT captions: the browser renders these itself, so they stay visible in the native
 // player's own fullscreen (a custom overlay div would not — fullscreen only shows the <video>).
@@ -989,25 +1024,8 @@ async function doExport(fmt) {
 $("txtBtn").addEventListener("click", () => doExport("txt"));
 $("docxBtn").addEventListener("click", () => doExport("docx"));
 
-$("playBtn").addEventListener("click", () => { video.paused ? video.play() : video.pause(); });
-video.addEventListener("play", () => ($("playBtn").textContent = "⏸"));
-video.addEventListener("pause", () => {
-  $("playBtn").textContent = "▶";
-  saveResume(currentVideo, video.currentTime, video.duration);   // remember where to resume next time
-});
-
-// skip 10 seconds forward/back
-$("skipBack").addEventListener("click", () => {
-  video.currentTime = Math.max(0, video.currentTime - 10);
-});
-$("skipFwd").addEventListener("click", () => {
-  video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
-});
-
-// playback speed
-$("speedSel").addEventListener("change", () => {
-  video.playbackRate = parseFloat($("speedSel").value);
-});
+// remember where to resume next time the video pauses (native controls fire 'pause')
+video.addEventListener("pause", () => saveResume(currentVideo, video.currentTime, video.duration));
 
 let _lastResumeSave = 0;
 video.addEventListener("timeupdate", () => {
@@ -1017,9 +1035,6 @@ video.addEventListener("timeupdate", () => {
     saveResume(currentVideo, t, d);
   }
   const idx = cues.findIndex((c) => t >= c.start && t <= c.end);
-  $("subline").textContent = idx >= 0 ? cues[idx].text : "";
-  $("pfill").style.width = (d ? (t / d) * 100 : 0) + "%";
-  $("tc").textContent = clock(t) + " / " + clock(d);
   if (idx !== curRow) {
     if (rowEls[curRow]) rowEls[curRow].classList.remove("cur");
     if (rowEls[idx]) {
@@ -1031,23 +1046,6 @@ video.addEventListener("timeupdate", () => {
     }
     curRow = idx;
   }
-});
-
-$("track").addEventListener("click", (e) => {
-  const r = $("track").getBoundingClientRect();
-  const frac = (r.right - e.clientX) / r.width; // RTL
-  if (video.duration) video.currentTime = Math.min(1, Math.max(0, frac)) * video.duration;
-});
-
-// fullscreen on the container (not the video element) — keeps subtitle overlay visible
-$("fsBtn").addEventListener("click", () => {
-  if (document.fullscreenElement) document.exitFullscreen();
-  else if (screenEl.requestFullscreen) screenEl.requestFullscreen();
-});
-// exit button visible inside fullscreen — not everyone remembers ESC
-$("exitFs").addEventListener("click", () => document.exitFullscreen());
-document.addEventListener("fullscreenchange", () => {
-  $("exitFs").hidden = document.fullscreenElement !== screenEl;
 });
 
 $("backBtn").addEventListener("click", () => {
@@ -1137,6 +1135,17 @@ function renderLecRow(l) {
   } else {
     row.onclick = () => openLecture(l.video);
   }
+  const seen = document.createElement("button");
+  seen.className = "lec-seen" + (l.viewed ? " on" : "");
+  seen.textContent = l.viewed ? "✓" : "○";
+  seen.title = l.viewed ? "סמן כלא נצפה" : "סמן כנצפה";
+  seen.onclick = async (e) => {
+    e.stopPropagation();
+    await window.pywebview.api.set_viewed(l.video, !l.viewed);
+    refreshLibrary();
+  };
+  row.appendChild(seen);
+
   const kebab = document.createElement("button");
   kebab.className = "kebab"; kebab.textContent = "⋯"; kebab.title = "פעולות";
   kebab.onclick = (e) => { e.stopPropagation(); showActionMenu(kebab, l.video, l.course, l.title); };
@@ -1172,6 +1181,7 @@ function renderDrawer() {
     head.className = "course-head";
     head.innerHTML =
       '<span class="course-arrow">▶</span>' +
+      `<span class="course-ic">${name ? courseIcon(name) : "📂"}</span>` +
       `<span class="course-name">${esc(name || "ללא קורס")}</span>` +
       `<span class="course-count">${lecs.length}</span>`;
     if (name) {
@@ -1238,6 +1248,7 @@ function renderLibraryOverview() {
     const card = document.createElement("button");
     card.className = "libcard";
     card.innerHTML =
+      `<div class="libcard-ic">${name ? courseIcon(name) : "📂"}</div>` +
       `<div class="libcard-name">${esc(name || "ללא קורס")}</div>` +
       `<div class="libcard-count">${lecs.length} ${lecs.length === 1 ? "הרצאה" : "הרצאות"}</div>` +
       `<div class="resume-bar libcard-bar"><div class="resume-fill" style="width:${pct}%"></div></div>` +
@@ -1258,11 +1269,109 @@ function renderLibraryDetail() {
   const lecs = (lecturesByCourse()[name]) || [];
   $("libDetailTitle").textContent = name || "ללא קורס";
   $("libDetailCount").textContent = `${lecs.length} ${lecs.length === 1 ? "הרצאה" : "הרצאות"}`;
+  const icBtn = $("libIconBtn");
+  icBtn.hidden = !name;
+  if (name) { icBtn.textContent = courseIcon(name); icBtn.onclick = (e) => { e.stopPropagation(); showIconPicker(icBtn, name); }; }
   $("libRenBtn").hidden = !name;
   $("libDelBtn").hidden = !name;
   $("libDetailSearch").value = "";
   renderLibraryDetailList(lecs, "");
+  renderCourseExtras(name);
 }
+
+// ── course page extras: checklist + notes (named courses only) ──
+const DEFAULT_COURSE_ICON = "📘";
+const COURSE_ICONS = ["📘", "📗", "📙", "📕", "📓", "🧮", "📐", "🔬", "⚗️", "💻", "🧠", "🌍", "📊", "🎼", "🎨", "⚖️", "🏛️", "🩺"];
+function courseMeta(name) {
+  const m = (library.course_meta && library.course_meta[name]) || {};
+  return { icon: m.icon || DEFAULT_COURSE_ICON, notes: m.notes || "", tasks: Array.isArray(m.tasks) ? m.tasks : [] };
+}
+function courseIcon(name) {
+  return (name && library.course_meta && library.course_meta[name] && library.course_meta[name].icon) || DEFAULT_COURSE_ICON;
+}
+// emoji picker popover — anchored to the given element; saves the chosen icon for the course
+function showIconPicker(anchorEl, name) {
+  document.querySelectorAll(".actionmenu").forEach((m) => m.remove());
+  const menu = document.createElement("div");
+  menu.className = "actionmenu iconpicker";
+  for (const ic of COURSE_ICONS) {
+    const b = document.createElement("button");
+    b.className = "ip-opt"; b.textContent = ic;
+    b.onclick = async () => {
+      menu.remove();
+      library = await window.pywebview.api.save_course_meta(name, { icon: ic });
+      if (currentView === "library") { if (libOpenCourse !== null) renderLibraryDetail(); else renderLibraryOverview(); }
+      renderDrawer();
+    };
+    menu.appendChild(b);
+  }
+  document.body.appendChild(menu);
+  const r = anchorEl.getBoundingClientRect();
+  let top = r.bottom + 4;
+  if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 4);
+  menu.style.top = top + "px";
+  let left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8));
+  menu.style.left = left + "px";
+  const close = (e) => { if (!menu.contains(e.target) && e.target !== anchorEl) { menu.remove(); document.removeEventListener("click", close, true); } };
+  document.addEventListener("click", close, true);
+}
+let _noteTimer = null;
+function renderCourseExtras(name) {
+  const box = $("courseExtras");
+  if (!name) { box.hidden = true; return; }   // "no course" bucket isn't a real course
+  box.hidden = false;
+  const meta = courseMeta(name);
+
+  // checklist
+  const list = $("courseTasks");
+  list.innerHTML = "";
+  if (!meta.tasks.length) {
+    list.innerHTML = '<div class="cx-empty">אין עדיין משימות.</div>';
+  } else {
+    meta.tasks.forEach((t, i) => {
+      const row = document.createElement("div");
+      row.className = "cx-task" + (t.done ? " done" : "");
+      const cb = document.createElement("button");
+      cb.className = "cx-check"; cb.textContent = t.done ? "✓" : "";
+      cb.onclick = () => { meta.tasks[i].done = !meta.tasks[i].done; saveTasks(name, meta.tasks); };
+      const txt = document.createElement("span");
+      txt.className = "cx-tasktext"; txt.textContent = t.text;
+      const del = document.createElement("button");
+      del.className = "cx-taskdel"; del.textContent = "✕"; del.title = "מחיקה";
+      del.onclick = () => { meta.tasks.splice(i, 1); saveTasks(name, meta.tasks); };
+      row.append(cb, txt, del);
+      list.appendChild(row);
+    });
+  }
+
+  // notes (debounced autosave)
+  const ta = $("courseNotes");
+  ta.value = meta.notes;
+  $("courseNoteStatus").textContent = "";
+  ta.oninput = () => {
+    clearTimeout(_noteTimer);
+    $("courseNoteStatus").textContent = "שומר…";
+    _noteTimer = setTimeout(async () => {
+      await window.pywebview.api.save_course_meta(name, { notes: ta.value });
+      library = await window.pywebview.api.library();   // keep local cache fresh
+      $("courseNoteStatus").textContent = "נשמר ✓";
+    }, 600);
+  };
+}
+async function saveTasks(name, tasks) {
+  library = await window.pywebview.api.save_course_meta(name, { tasks });
+  if (libOpenCourse === name) renderCourseExtras(name);
+}
+function addCourseTask() {
+  const inp = $("courseTaskIn");
+  const text = inp.value.trim();
+  if (!text || libOpenCourse == null) return;
+  const tasks = courseMeta(libOpenCourse).tasks.concat([{ text, done: false }]);
+  inp.value = "";
+  saveTasks(libOpenCourse, tasks);
+}
+$("courseTaskAdd").addEventListener("click", addCourseTask);
+$("courseTaskIn").addEventListener("keydown", (e) => { if (e.key === "Enter") addCourseTask(); });
 
 function renderLibraryDetailList(lecs, q) {
   const wrap = $("libDetailList");
@@ -1297,9 +1406,19 @@ $("libNewCourseBtn").addEventListener("click", () => {
   row.hidden = !row.hidden;
   if (!row.hidden) $("libNewCourseIn").focus();
 });
+// shared course-create — registers the course, refreshes the library, then applies the caller's
+// follow-up (expand it in the drawer / auto-select it on the upload screen). One helper for the
+// three inline "+ course" inputs (drawer, Library screen, upload screen).
+async function createCourseNamed(name, opts = {}) {
+  name = (name || "").trim();
+  if (!name) return;
+  await window.pywebview.api.create_course(name);
+  if (opts.expand) openCourses.add(name);
+  await refreshLibrary();
+  if (opts.select) $("courseSel").value = name;
+}
 async function createLibraryCourseInline() {
-  const name = $("libNewCourseIn").value.trim();
-  if (name) { await window.pywebview.api.create_course(name); await refreshLibrary(); }
+  await createCourseNamed($("libNewCourseIn").value);
   $("libNewCourseIn").value = ""; $("libNewCourseRow").hidden = true;
 }
 $("libNewCourseOk").addEventListener("click", createLibraryCourseInline);
@@ -1375,16 +1494,17 @@ function stopProcTips() {
   $("procTip").hidden = true;
 }
 
-// ── resume position (per video, localStorage only — no backend) ──
+// ── resume position (persisted in Python — localStorage doesn't survive pywebview restarts) ──
+// resumeData mirrors the backend file so getResume() stays synchronous; writes are fire-and-forget.
+let resumeData = { last: "", positions: {} };
 function saveResume(video, pos, dur) {
   if (!video || !isFinite(pos) || pos < 3) return;   // ignore the first few seconds
-  try {
-    localStorage.setItem("resume:" + video, JSON.stringify({ pos, dur: dur || 0 }));
-    localStorage.setItem("lastVideo", video);
-  } catch (e) {}
+  resumeData.positions[video] = { pos, dur: dur || 0 };
+  resumeData.last = video;
+  try { window.pywebview.api.save_resume(video, pos, dur || 0); } catch (e) {}
 }
 function getResume(video) {
-  try { return JSON.parse(localStorage.getItem("resume:" + video) || "null"); } catch (e) { return null; }
+  return (resumeData.positions && resumeData.positions[video]) || null;
 }
 
 // shared grouping used by the sidebar drawer and the home "recent courses" row
@@ -1421,8 +1541,7 @@ function renderWidgets() {
 
 function renderResume() {
   const card = $("resumeCard");
-  let video = "";
-  try { video = localStorage.getItem("lastVideo") || ""; } catch (e) {}
+  const video = resumeData.last || "";
   const lec = video && library.lectures.find((l) => l.video === video);
   const r = lec && !lec.missing && getResume(video);   // don't offer resume for an unreachable file
   if (!lec || !r) { card.hidden = true; return; }
@@ -1623,17 +1742,23 @@ async function openLecture(path, seekTo) {
   if (!r) return;
   cues = r.cues || [];
   currentVideo = r.video;
+  // auto-resume: if opened without an explicit position, continue from where we stopped last time
+  if (seekTo == null) {
+    const saved = getResume(currentVideo);
+    if (saved && saved.pos > 3 && (!saved.dur || saved.pos < saved.dur - 15)) seekTo = saved.pos;
+  }
   video.src = await window.pywebview.api.media_url(currentVideo);
   setReturnView(currentView);
   setPlayTitle(currentVideo);
   closeDrawer();
   show("play");
-  video.load();
-  buildVtt(cues);
-  renderTranscript();
+  // attach the seek BEFORE load() — otherwise loadedmetadata can fire first and the resume is lost
   if (seekTo != null) {
     video.addEventListener("loadedmetadata", () => { video.currentTime = seekTo; video.play(); }, { once: true });
   }
+  video.load();
+  buildVtt(cues);
+  renderTranscript();
 }
 
 // ── global search (home screen) ──
@@ -1686,13 +1811,8 @@ $("drawerOv").addEventListener("click", closeDrawer);
 $("newCourseBtn").addEventListener("click", async () => {
   const inp = $("newCourseIn");
   if (inp.hidden) { inp.hidden = false; inp.focus(); return; }
-  const name = inp.value.trim();
-  if (name) {
-    await window.pywebview.api.create_course(name);
-    openCourses.add(name);
-  }
+  await createCourseNamed(inp.value, { expand: true });
   inp.value = ""; inp.hidden = true;
-  refreshLibrary();
 });
 $("newCourseIn").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $("newCourseBtn").click();
@@ -1706,12 +1826,7 @@ $("courseAddBtn").addEventListener("click", () => {
   if (!row.hidden) $("courseAddIn").focus();
 });
 async function createCourseInline() {
-  const name = $("courseAddIn").value.trim();
-  if (name) {
-    await window.pywebview.api.create_course(name);
-    await refreshLibrary();          // repopulates courseSel from the library
-    $("courseSel").value = name;     // auto-select the just-created course for this upload
-  }
+  await createCourseNamed($("courseAddIn").value, { select: true });   // auto-select for this upload
   $("courseAddIn").value = ""; $("courseAddRow").hidden = true;
 }
 $("courseAddOk").addEventListener("click", createCourseInline);
@@ -1721,16 +1836,21 @@ $("courseAddIn").addEventListener("keydown", (e) => {
 });
 
 // ── player keyboard shortcuts (Space · ← · →) ──
+// capture phase (true) — we intercept the arrows BEFORE the native <video> controls do, so we can
+// cancel their own (much larger, duration-relative) seek and always skip exactly 10 seconds.
 document.addEventListener("keydown", (e) => {
   if (currentView !== "play") return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === "INPUT" || ae.tagName === "SELECT" || ae.isContentEditable)) return;
-  const isArrow = e.key === "ArrowLeft" || e.key === "ArrowRight";
-  // defer other keys (e.g. space) to the native player, but always own the 10-second arrow skip
-  if (NATIVE_PLAYER && ae === video && !isArrow) return;
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault(); e.stopImmediatePropagation();   // kill the native player's default seek
+    const step = e.key === "ArrowLeft" ? -10 : 10;
+    video.currentTime = Math.min(video.duration || Infinity, Math.max(0, video.currentTime + step));
+    return;
+  }
+  // let the native player own other keys (space etc.) when it's focused
+  if (ae === video) return;
   if (e.key === " ") { e.preventDefault(); video.paused ? video.play() : video.pause(); }
-  else if (e.key === "ArrowLeft") { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
-  else if (e.key === "ArrowRight") { e.preventDefault(); video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10); }
-});
+}, true);
 
 show("home");

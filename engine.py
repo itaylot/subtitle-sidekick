@@ -169,12 +169,26 @@ def _preserve_corrupt(path):
 
 
 def load_library():
-    """Returns {courses: [...], lectures: [...]} (creates empty if missing)."""
+    """Returns {courses: [...], lectures: [...]} (creates empty if missing).
+
+    Also returns "recovered": True (transient, not persisted) the one time library.json itself
+    turns up missing while its rolling .bak is intact — this can't happen from our own atomic
+    write (os.replace never leaves the target missing), so it means something external deleted
+    it. Recovering silently would hide a real problem; recovering into an empty library would
+    look like data loss. So: recover from .bak, persist it back immediately, and tell the caller.
+    """
+    recovered = False
     try:
         with open(LIB_PATH, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        data = {}
+        bak = LIB_PATH + ".bak"
+        try:
+            with open(bak, encoding="utf-8") as f:
+                data = json.load(f)
+            recovered = True
+        except (FileNotFoundError, ValueError, OSError):
+            data = {}
     except Exception:
         _preserve_corrupt(LIB_PATH)   # unreadable ≠ empty — keep a copy before starting fresh
         data = {}
@@ -195,6 +209,9 @@ def load_library():
         if c and c not in seen:
             seen.add(c); courses.append(c)
     data["courses"] = courses
+    if recovered:
+        save_library(data)          # write it back to library.json so this is a one-time recovery
+        data = dict(data, recovered=True)
     return data
 
 
@@ -920,6 +937,23 @@ if __name__ == "__main__":
     save_course_meta("C", {"tasks": [{"text": "a", "done": 1}, {"text": "  ", "done": False}], "notes": "n"})
     _m = load_library()["course_meta"]["C"]
     assert _m["notes"] == "n" and _m["tasks"] == [{"text": "a", "done": True}], _m
+    LIB_PATH, LIB_DIR = _old_path, _old_dir
+    shutil.rmtree(_lib, ignore_errors=True)
+
+    # library.json missing but .bak intact → recover from .bak instead of showing an empty library
+    _lib = tempfile.mkdtemp()
+    _old_path, _old_dir = LIB_PATH, LIB_DIR
+    LIB_DIR, LIB_PATH = _lib, os.path.join(_lib, "library.json")
+    save_library({"courses": ["C"], "lectures": [{"video": "x.mp4", "course": "C", "title": "t"}]})
+    save_library({"courses": ["C"], "lectures": [{"video": "x.mp4", "course": "C", "title": "t2"}]})  # refresh .bak
+    os.remove(LIB_PATH)                              # simulate the live file disappearing externally
+    assert os.path.exists(LIB_PATH + ".bak")
+    _recovered = load_library()
+    assert _recovered["recovered"] is True
+    assert _recovered["lectures"][0]["title"] == "t", _recovered   # .bak holds the PREVIOUS save
+    assert os.path.exists(LIB_PATH)                  # recovery persisted it back
+    _again = load_library()
+    assert "recovered" not in _again                 # one-time only — the file is no longer missing
     LIB_PATH, LIB_DIR = _old_path, _old_dir
     shutil.rmtree(_lib, ignore_errors=True)
     print("engine self-check OK")

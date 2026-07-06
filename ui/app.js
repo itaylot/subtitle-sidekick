@@ -1082,6 +1082,15 @@ async function refreshLibrary() {
   if (currentView === "library") {
     if (libOpenCourse !== null) renderLibraryDetail(); else renderLibraryOverview();
   }
+  // library.json went missing externally and was recovered from its rolling backup — tell the
+  // user once so a silent recovery never looks like the app just "lost" their lectures.
+  if (library.recovered) {
+    confirmModal({
+      title: "הספרייה שוחזרה מגיבוי",
+      body: "קובץ הספרייה לא נמצא באתחול, ושוחזר אוטומטית מהגיבוי האחרון. כל ההרצאות והקורסים כאן — אבל אם משהו חסר, בדקו את library.json.bak בתיקיית הנתונים.",
+      buttons: [{ label: "הבנתי", value: "ok" }],
+    });
+  }
 }
 
 // course selector on the open screen (preserves current selection)

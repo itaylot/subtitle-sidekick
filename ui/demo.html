@@ -191,7 +191,7 @@
       await caption("חיפוש בתוך התמליל");
       const s = id("tcSearch");
       if (s) { moveTo(s); await wait(600); s.focus();
-        for (const ch of "נגזרת") { s.value += ch; s.dispatchEvent(new Event("input", { bubbles: true })); await wait(160); } }
+        for (const ch of "החלטות") { s.value += ch; s.dispatchEvent(new Event("input", { bubbles: true })); await wait(160); } }
       await wait(2200);
 
       // outro

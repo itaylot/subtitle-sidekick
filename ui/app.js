@@ -12,26 +12,29 @@ const $ = (id) => document.getElementById(id);
 const DEMO = new URLSearchParams(location.search).has("demo");
 if (DEMO) installDemoBridge();
 function installDemoBridge() {
-  const courses = ["חדו\"א 2 - הרצאות", "מבוא לבינה מלאכותית", "אלגוריתמים"];
+  const courses = ["הרצאות אורח", "מבוא לבינה מלאכותית", "אלגוריתמים"];
+  // real excerpt from a transcribed lecture (TEDx — Yossi Yeshurun on decision-making),
+  // re-based to start at t=0 so the demo's playFake loop can drive it from the beginning.
   const demoCues = [
-    { start: 0, end: 3.2, text: "שלום לכולם, נתחיל את ההרצאה של היום" },
-    { start: 3.2, end: 7.0, text: "בשיעור הקודם דיברנו על גבולות של פונקציות" },
-    { start: 7.0, end: 10.5, text: "היום נעבור לנגזרות ולמשמעות הגאומטרית שלהן" },
-    { start: 10.5, end: 14.0, text: "הנגזרת מתארת את קצב השינוי של הפונקציה" },
-    { start: 14.0, end: 17.5, text: "כלומר, את שיפוע המשיק בכל נקודה על הגרף" },
-    { start: 17.5, end: 21.0, text: "נראה מיד דוגמה מספרית שתמחיש את זה" },
+    { start: 0.00, end: 1.76, text: "40 שנה אני לומד" },
+    { start: 2.30, end: 3.38, text: "ומלמד קבלת החלטות." },
+    { start: 4.26, end: 7.24, text: "האם יש לי איזה מסר שאני יכול לתת לאנשים שמקבלים החלטות?" },
+    { start: 8.70, end: 10.68, text: "ויש לי שלושה מסרים, אני חושב." },
+    { start: 11.86, end: 16.06, text: "הראשון זה לנסות להתעלם מאמונות טפלות" },
+    { start: 16.96, end: 21.06, text: "כמו אסטרולוגיה ונומרולוגיה וגרפולוגיה" },
+    { start: 21.72, end: 23.46, text: "וכל הקשקושים האלה," },
+    { start: 24.04, end: 25.66, text: "ובאמת לחשוב בצורה יותר מדעית." },
   ];
   const lectures = [
-    { video: "demo/calc-05.mp4", srt: "demo/calc-05.srt", course: "חדו\"א 2 - הרצאות", title: "חדו\"א 2 — שיעור 5: נגזרות", added: 1782900000, viewed: false },
-    { video: "demo/calc-04.mp4", srt: "demo/calc-04.srt", course: "חדו\"א 2 - הרצאות", title: "חדו\"א 2 — שיעור 4: רציפות", added: 1782810000, viewed: true },
+    { video: "demo/tedx-yeshurun.mp4", srt: "demo/tedx-yeshurun.srt", course: "הרצאות אורח", title: "הרצאת TEDx — פרופ' יוסי יסעור: קבלת החלטות", added: 1782900000, viewed: false },
     { video: "demo/ai-03.mp4", srt: "demo/ai-03.srt", course: "מבוא לבינה מלאכותית", title: "AI — Lecture 3: Search", added: 1782700000, viewed: true },
     { video: "demo/algo-02.mp4", srt: "demo/algo-02.srt", course: "אלגוריתמים", title: "אלגוריתמים — שיעור 2", added: 1782600000, viewed: true },
   ];
   const settings = { transcription_mode: "cloud", transcription_language: "he", subtitle_size: "md",
     subtitle_bg: "dark", library_dir: "C:\\הרצאות",
     cloud: { endpoint_url: "https://api.runpod.ai/v2/demo", api_key: "demo", price_per_hour: 0.39, total_seconds: 5400, total_cost: 0.59 } };
-  const course_meta = { "חדו\"א 2 - הרצאות": { notes: "לחזור על משפט לגראנז'", tasks: [{ text: "לפתור תרגיל 3", done: false }, { text: "לצפות בשיעור 5", done: true }] } };
-  const demoResume = { last: "demo/calc-05.mp4", positions: { "demo/calc-05.mp4": { pos: 8.5, dur: 21 } } };
+  const course_meta = { "הרצאות אורח": { notes: "מרצה מומלץ — לבדוק אם יש עוד הרצאות שלו", tasks: [{ text: "לסכם את שלושת המסרים", done: false }, { text: "לצפות שוב בקטע ההסתברותי", done: true }] } };
+  const demoResume = { last: "demo/tedx-yeshurun.mp4", positions: { "demo/tedx-yeshurun.mp4": { pos: 8.5, dur: 25.66 } } };
   const ok = () => Promise.resolve(true);
   window.__demoCues = demoCues;   // the demo controller animates player playback from these
   window.pywebview = { api: {
@@ -40,10 +43,10 @@ function installDemoBridge() {
     save_settings: (d) => { if (d && d.cloud) Object.assign(settings.cloud, d.cloud); Object.assign(settings, d || {}); return Promise.resolve(settings); },
     library: () => Promise.resolve({ courses, lectures, course_meta }),
     load_queue: () => Promise.resolve([]), save_queue: ok,
-    open_lecture: () => Promise.resolve({ video: "demo/calc-05.mp4", cues: demoCues, srt: "demo/calc-05.srt" }),
+    open_lecture: () => Promise.resolve({ video: "demo/tedx-yeshurun.mp4", cues: demoCues, srt: "demo/tedx-yeshurun.srt" }),
     media_url: () => Promise.resolve(""),
     search: (q) => { q = (q || "").trim(); const hits = demoCues.filter((c) => c.text.includes(q));
-      return Promise.resolve(q && hits.length ? [{ video: "demo/calc-05.mp4", title: "חדו\"א 2 — שיעור 5: נגזרות", course: "חדו\"א 2 - הרצאות", hits }] : []); },
+      return Promise.resolve(q && hits.length ? [{ video: "demo/tedx-yeshurun.mp4", title: "הרצאת TEDx — פרופ' יוסי יסעור: קבלת החלטות", course: "הרצאות אורח", hits }] : []); },
     version: () => Promise.resolve("1.0.0"),
     check_update: () => Promise.resolve({ current: "1.0.0", latest: "1.0.0", update_available: false }),
     get_dictionary: () => Promise.resolve({ rules: [{ from: "פאי תורץ", to: "PyTorch" }, { from: "ניורל נטוורק", to: "Neural Network" }] }),
@@ -57,7 +60,7 @@ function installDemoBridge() {
       return Promise.resolve({ courses, lectures, course_meta }); },
     create_course: ok, set_lecture_course: ok, rename_lecture: ok, remove_lecture: ok, remove_course: ok,
     rename_course: ok, save_srt: ok, export: () => Promise.resolve("demo.txt"),
-    pick_file: () => Promise.resolve("C:\\הרצאות\\חדוא 2 — שיעור 6.mp4"),
+    pick_file: () => Promise.resolve("C:\\הרצאות\\הרצאת TEDx — קבלת החלטות.mp4"),
     pick_folder: () => Promise.resolve(""),
     open_in_browser: ok, win_close: () => {}, win_minimize: () => {}, win_fullscreen: () => {},
     // simulate a transcription: stream progress then finish, driving the real processing screen

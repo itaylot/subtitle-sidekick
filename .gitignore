@@ -54,3 +54,6 @@ dist/
 # חבילת עיצוב (רפרנס בלבד — לא חלק מהמוצר)
 תמלול כתוביות עברית/
 תמלול כתוביות עברית.zip
+
+# local-only demo media (copyrighted lecture clip — never commit)
+ui/demo/

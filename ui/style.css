@@ -94,7 +94,7 @@ body {
    is capped for readability so it doesn't stretch edge-to-edge on wide monitors ── */
 .win {
   width: 100%;
-  max-width: 1000px;
+  max-width: 1280px;   /* fills wide/maximized monitors more; still capped so text views stay readable */
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -912,8 +912,25 @@ body[data-sub-bg="none"]  video::cue { background: transparent; color: #fff; tex
   text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* player body: video + transcript. Stacked on narrow windows, side-by-side on wide ones so the
+   transcript fills the horizontal space that would otherwise be dead beside the video. */
+.player-body { display: flex; flex-direction: column; gap: 0; }
+
 /* ── transcript panel (search · edit · export) ── */
 .transcript { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (min-width: 900px) {
+  .player-body { flex-direction: row; align-items: stretch; gap: 20px; }
+  .player-body .screen {
+    flex: 0 0 62%; max-height: 74vh; margin: 0;   /* video takes the lion's share, grows with the window */
+  }
+  .player-body .transcript {
+    flex: 1 1 0; min-width: 0; margin: 0; padding: 0 18px 0 0;
+    border-top: none; border-inline-start: 1px solid var(--line);
+    display: flex; flex-direction: column; overflow: hidden;   /* matches the video's height, scrolls inside */
+  }
+  .player-body .transcript .tc-list { flex: 1; min-height: 0; }
+}
 .tc-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 .tc-search {
   flex: 1; background: var(--card); border: 1px solid var(--hairline); color: var(--text);

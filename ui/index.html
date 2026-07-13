@@ -173,22 +173,26 @@
           <button class="kebab" id="subBtn" title="כתוביות">🅰</button>
           <button class="kebab" id="playKebab" title="פעולות">⋯</button>
         </div>
-        <div class="screen">
-          <video id="video" preload="metadata"><track id="vtt" kind="subtitles" srclang="he" label="עברית" default></video>
-          <button class="cc" id="ccToggle" title="הצג / הסתר כתוביות">CC</button>
-        </div>
-
-        <!-- transcript panel: search · edit · export -->
-        <div class="transcript" id="transcript">
-          <div class="tc-head">
-            <input class="tc-search" id="tcSearch" placeholder="🔎 חיפוש בכתוביות…" />
-            <button class="tc-act" id="dictAddSelBtn" title="הוספת המילה שבחרתם למילון התיקונים">＋ מילון</button>
-            <button class="tc-act" id="saveBtn">💾 שמור</button>
-            <button class="tc-act" id="txtBtn">TXT</button>
-            <button class="tc-act" id="docxBtn">Word</button>
+        <!-- video + transcript sit side-by-side on wide windows (transcript fills the dead space
+             beside the video), and stack vertically on narrow ones -->
+        <div class="player-body">
+          <div class="screen">
+            <video id="video" preload="metadata"><track id="vtt" kind="subtitles" srclang="he" label="עברית" default></video>
+            <button class="cc" id="ccToggle" title="הצג / הסתר כתוביות">CC</button>
           </div>
-          <div class="tc-list" id="tcList"></div>
-          <div class="tc-status" id="tcStatus"></div>
+
+          <!-- transcript panel: search · edit · export -->
+          <div class="transcript" id="transcript">
+            <div class="tc-head">
+              <input class="tc-search" id="tcSearch" placeholder="🔎 חיפוש בכתוביות…" />
+              <button class="tc-act" id="dictAddSelBtn" title="הוספת המילה שבחרתם למילון התיקונים">＋ מילון</button>
+              <button class="tc-act" id="saveBtn">💾 שמור</button>
+              <button class="tc-act" id="txtBtn">TXT</button>
+              <button class="tc-act" id="docxBtn">Word</button>
+            </div>
+            <div class="tc-list" id="tcList"></div>
+            <div class="tc-status" id="tcStatus"></div>
+          </div>
         </div>
       </section>
 

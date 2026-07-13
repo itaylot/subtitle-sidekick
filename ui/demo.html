@@ -183,9 +183,12 @@
       await waitFor(() => { const v = id("view-play"); return v && !v.hidden; });
       await wait(700);
 
-      // 7) captions playing
+      // 7) real lecture footage playing with synced captions (muted for autoplay)
       await caption("צפייה עם כתוביות בעברית — גם במסך מלא");
-      await playFake(6.5);
+      const vid = id("video");
+      if (vid) { try { vid.muted = true; vid.currentTime = 0; await vid.play(); } catch (e) {} }
+      await wait(7500);
+      if (vid) vid.pause();
 
       // 8) search inside the transcript
       await caption("חיפוש בתוך התמליל");

@@ -44,7 +44,7 @@ function installDemoBridge() {
     library: () => Promise.resolve({ courses, lectures, course_meta }),
     load_queue: () => Promise.resolve([]), save_queue: ok,
     open_lecture: () => Promise.resolve({ video: "demo/tedx-yeshurun.mp4", cues: demoCues, srt: "demo/tedx-yeshurun.srt" }),
-    media_url: () => Promise.resolve(""),
+    media_url: () => Promise.resolve("demo/tedx.mp4"),   // real lecture clip (local-only, gitignored) so the demo player shows a real feed
     search: (q) => { q = (q || "").trim(); const hits = demoCues.filter((c) => c.text.includes(q));
       return Promise.resolve(q && hits.length ? [{ video: "demo/tedx-yeshurun.mp4", title: "הרצאת TEDx — פרופ' יוסי יסעור: קבלת החלטות", course: "הרצאות אורח", hits }] : []); },
     version: () => Promise.resolve("1.0.0"),
@@ -938,6 +938,15 @@ window.onCancelled = function () {
 // highlight + resume are driven by the 'timeupdate' event below.
 const video = $("video");
 video.setAttribute("controls", "");
+
+// match the player box to the video's real shape so there are no black letterbox bars around it.
+// falls back to the CSS default (16:9) until metadata loads / if dimensions are unknown.
+video.addEventListener("loadedmetadata", () => {
+  const box = video.closest(".screen");
+  if (box && video.videoWidth && video.videoHeight) {
+    box.style.aspectRatio = video.videoWidth + " / " + video.videoHeight;
+  }
+});
 
 // Native WebVTT captions: the browser renders these itself, so they stay visible in the native
 // player's own fullscreen (a custom overlay div would not — fullscreen only shows the <video>).

@@ -914,6 +914,18 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: contain; background: #000;
 }
+
+/* Fullscreen switch: the OS window resize and the DOM relayout can't be one atomic step, so the
+   video reflows twice on the way in and out. Hold it dark until the new size has settled, then fade
+   in — a deliberate transition reads as intent where a raw jump reads as a glitch. The video itself
+   is masked (not an overlay div) because in fullscreen the browser paints only the video element. */
+@keyframes fs-settle { 0%, 55% { opacity: 0; } 100% { opacity: 1; } }
+video:fullscreen,
+body.fs-exiting .screen video { animation: fs-settle 340ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  video:fullscreen,
+  body.fs-exiting .screen video { animation: none; }
+}
 /* demo mode: soft poster behind the source-less player during the recorded tour */
 body.demo-mode .screen { background: radial-gradient(120% 100% at 50% 0%, #2a2018, var(--screen)); }
 body.demo-mode .screen video { background: transparent; }

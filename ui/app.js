@@ -169,8 +169,22 @@ $("winFull").addEventListener("click", toggleOsFullscreen);
 // The native <video> fullscreen button only fills the *webview* — the OS window stays merely
 // maximized, so the Windows taskbar and title bar stay on screen. Mirror the player's fullscreen
 // onto the real window so the video actually covers the screen.
+//
+// Resizing the OS window and re-laying out the DOM can't happen in one atomic step, so the video
+// visibly reflows twice on the way in and out. The CSS `fs-settle` animation holds it dark until
+// the new size settles and then fades it in, which reads as a deliberate transition instead of a
+// glitch. (A plain DOM overlay can't do this job: while the video is the fullscreen element the
+// browser paints only that element, so anything else in the DOM simply isn't rendered.)
+let _fsExitTimer = null;
 document.addEventListener("fullscreenchange", () => {
-  if (!!document.fullscreenElement !== _osFullscreen) toggleOsFullscreen();
+  const entering = !!document.fullscreenElement;
+  if (entering !== _osFullscreen) toggleOsFullscreen();
+  if (!entering) {
+    // on the way out the video is back in normal flow, so it needs the mask applied by hand
+    document.body.classList.add("fs-exiting");
+    clearTimeout(_fsExitTimer);
+    _fsExitTimer = setTimeout(() => document.body.classList.remove("fs-exiting"), 380);
+  }
 });
 
 // ── transcription mode selector: local-accurate / local-fast / cloud ──

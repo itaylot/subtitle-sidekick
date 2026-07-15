@@ -375,6 +375,9 @@ class Api:
     def set_viewed(self, video, viewed):
         return engine.set_viewed(video, viewed)
 
+    def reorder_lectures(self, course, videos):
+        return engine.reorder_lectures(course, videos)
+
     # playback resume — persisted in Python (localStorage doesn't survive pywebview restarts)
     def get_resume(self):
         return engine.load_resume()
@@ -461,6 +464,20 @@ class Api:
             return os.path.basename(out)
         except Exception as e:  # noqa: BLE001
             return "ERR: " + str(e)
+
+    # export straight from the saved SRT — used by the ⋯ menu, so a lecture can be exported
+    # without opening it in the player first
+    def export_lecture(self, video, fmt):
+        try:
+            out = engine.export_lecture(video, fmt)
+            try:
+                os.startfile(out)  # noqa: SLF001
+            except Exception:
+                pass
+            return os.path.basename(out)
+        except Exception as e:  # noqa: BLE001
+            _log("EXPORT ERR: " + traceback.format_exc())
+            return "ERR: " + _friendly_error(e)
 
     def _js(self, fn, arg):
         try:

@@ -696,6 +696,43 @@ def open_lecture(video):
     return {"video": video, "cues": parse_srt(srt), "srt": srt}
 
 
+def reorder_lectures(course, ordered_videos):
+    """Set the display order of one course's lectures (drag-and-drop in the course page).
+
+    The flat lectures array IS the display order, so there's no order field to keep in sync: we just
+    slot this course's lectures back into the positions they already occupy. Other courses are
+    untouched, and lectures the caller didn't mention (e.g. hidden by a search filter) keep their
+    relative order at the end.
+    """
+    course = (course or "").strip()
+    data = load_library()
+    lecs = data["lectures"]
+    idxs = [i for i, l in enumerate(lecs) if (l.get("course") or "").strip() == course]
+    by_video = {os.path.abspath(lecs[i].get("video", "")): lecs[i] for i in idxs}
+    ordered = [by_video[os.path.abspath(v)] for v in (ordered_videos or [])
+               if os.path.abspath(v) in by_video]
+    seen = {id(l) for l in ordered}
+    ordered += [lecs[i] for i in idxs if id(lecs[i]) not in seen]
+    for slot, lec in zip(idxs, ordered):
+        lecs[slot] = lec
+    return save_library(data)
+
+
+def export_lecture(video, fmt):
+    """Export a saved lecture's transcript straight from its SRT — no need to open it in the player.
+
+    Deliberately does NOT reuse open_lecture(): that marks the lecture as viewed, and exporting a
+    transcript is not watching it. Returns the written file's path.
+    """
+    video = os.path.abspath(video)
+    lec = next((l for l in load_library()["lectures"] if l.get("video") == video), None)
+    srt = (lec or {}).get("srt") or (os.path.splitext(video)[0] + ".srt")
+    cues = parse_srt(srt)
+    if not cues:
+        raise RuntimeError("לא נמצא תמליל להרצאה הזו.")
+    return export_docx(video, cues) if fmt == "docx" else export_txt(video, cues)
+
+
 def search_library(query):
     """Search text across all SRTs in the library. Returns [{video, title, course, hits:[cue,…]}, …]."""
     query = (query or "").strip().lower()
@@ -954,6 +991,23 @@ if __name__ == "__main__":
     assert os.path.exists(LIB_PATH)                  # recovery persisted it back
     _again = load_library()
     assert "recovered" not in _again                 # one-time only — the file is no longer missing
+    LIB_PATH, LIB_DIR = _old_path, _old_dir
+    shutil.rmtree(_lib, ignore_errors=True)
+
+    # reorder_lectures: reorders one course in place, never disturbs other courses
+    _lib = tempfile.mkdtemp()
+    _old_path, _old_dir = LIB_PATH, LIB_DIR
+    LIB_DIR, LIB_PATH = _lib, os.path.join(_lib, "library.json")
+    _mk = lambda v, c: {"video": os.path.abspath(v), "srt": "", "course": c, "title": v, "viewed": False}
+    save_library({"courses": ["A", "B"], "lectures": [
+        _mk("a1.mp4", "A"), _mk("b1.mp4", "B"), _mk("a2.mp4", "A"), _mk("a3.mp4", "A")]})
+    reorder_lectures("A", [os.path.abspath(v) for v in ("a3.mp4", "a1.mp4", "a2.mp4")])
+    _got = [os.path.basename(l["video"]) for l in load_library()["lectures"]]
+    assert _got == ["a3.mp4", "b1.mp4", "a1.mp4", "a2.mp4"], _got   # B stayed in its slot
+    # a lecture the caller omitted (e.g. hidden by a filter) is kept, not dropped
+    reorder_lectures("A", [os.path.abspath("a2.mp4")])
+    _a = [os.path.basename(l["video"]) for l in load_library()["lectures"] if l["course"] == "A"]
+    assert sorted(_a) == ["a1.mp4", "a2.mp4", "a3.mp4"] and _a[0] == "a2.mp4", _a
     LIB_PATH, LIB_DIR = _old_path, _old_dir
     shutil.rmtree(_lib, ignore_errors=True)
     print("engine self-check OK")

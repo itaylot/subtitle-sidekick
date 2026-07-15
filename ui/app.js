@@ -53,6 +53,12 @@ function installDemoBridge() {
     save_dictionary: (r) => Promise.resolve({ rules: r }), reapply_dictionary: () => Promise.resolve(3),
     apply_dictionary_to_cues: (c) => Promise.resolve(c),
     set_viewed: (v, b) => { const l = lectures.find((x) => x.video === v); if (l) l.viewed = b; return ok(); },
+    reorder_lectures: (course, videos) => {   // mirror the real reorder: re-slot this course's rows
+      const idxs = lectures.map((l, i) => [l, i]).filter(([l]) => (l.course || "") === course).map(([, i]) => i);
+      const ordered = videos.map((v) => lectures.find((l) => l.video === v)).filter(Boolean);
+      idxs.forEach((slot, k) => { if (ordered[k]) lectures[slot] = ordered[k]; });
+      return Promise.resolve({ courses, lectures, course_meta });
+    },
     get_resume: () => Promise.resolve(demoResume),
     save_resume: (v, pos, dur) => { demoResume.positions[v] = { pos, dur }; demoResume.last = v; return Promise.resolve(demoResume); },
     save_course_meta: (name, meta) => { const c = course_meta[name] = course_meta[name] || { notes: "", tasks: [] };
@@ -60,6 +66,7 @@ function installDemoBridge() {
       return Promise.resolve({ courses, lectures, course_meta }); },
     create_course: ok, set_lecture_course: ok, rename_lecture: ok, remove_lecture: ok, remove_course: ok,
     rename_course: ok, save_srt: ok, export: () => Promise.resolve("demo.txt"),
+    export_lecture: (v, fmt) => Promise.resolve("demo — תמליל." + fmt),
     pick_file: () => Promise.resolve("C:\\הרצאות\\הרצאת TEDx — קבלת החלטות.mp4"),
     pick_folder: () => Promise.resolve(""),
     open_in_browser: ok, win_close: () => {}, win_minimize: () => {}, win_fullscreen: () => {},
@@ -139,7 +146,23 @@ applySubtitleStyle("md", "dark");   // sensible default until settings load
 // ── window buttons (the colored dots) ──
 $("winClose").addEventListener("click", () => window.pywebview.api.win_close());
 $("winMin").addEventListener("click", () => window.pywebview.api.win_minimize());
-$("winFull").addEventListener("click", () => window.pywebview.api.win_fullscreen());
+
+// OS-level fullscreen. pywebview only exposes a *toggle*, not a setter, so every caller (the green
+// dot and the player's fullscreen button) must go through here — otherwise they desync and one
+// click ends up doing nothing.
+let _osFullscreen = false;
+function toggleOsFullscreen() {
+  _osFullscreen = !_osFullscreen;
+  try { window.pywebview.api.win_fullscreen(); } catch (e) {}
+}
+$("winFull").addEventListener("click", toggleOsFullscreen);
+
+// The native <video> fullscreen button only fills the *webview* — the OS window stays merely
+// maximized, so the Windows taskbar and title bar stay on screen. Mirror the player's fullscreen
+// onto the real window so the video actually covers the screen.
+document.addEventListener("fullscreenchange", () => {
+  if (!!document.fullscreenElement !== _osFullscreen) toggleOsFullscreen();
+});
 
 // ── transcription mode selector: local-accurate / local-fast / cloud ──
 // persisted in settings so the last choice is remembered.
@@ -1145,10 +1168,53 @@ async function deleteCourseFlow(name, lecCount) {
 }
 
 // a single lecture row (title + ⋯ action menu) — shared by the drawer and the Library detail list
-function renderLecRow(l) {
+// drag-to-reorder lectures inside a course page — same native HTML5 pattern as the queue rows,
+// keyed by video path (a lecture's unique id). Python persists the new order.
+let _dragVideo = null;
+function addLecDragHandlers(row, l) {
+  row.draggable = true;
+  row.addEventListener("dragstart", (e) => {
+    _dragVideo = l.video; row.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", l.video); } catch (err) {}
+  });
+  row.addEventListener("dragend", () => {
+    _dragVideo = null; row.classList.remove("dragging");
+    document.querySelectorAll(".lec.drag-over").forEach((el) => el.classList.remove("drag-over"));
+  });
+  row.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    if (_dragVideo && l.video !== _dragVideo) row.classList.add("drag-over");
+  });
+  row.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; });
+  row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+  row.addEventListener("drop", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    row.classList.remove("drag-over");
+    reorderLectures(_dragVideo, l.video);
+  });
+}
+async function reorderLectures(fromVideo, toVideo) {
+  if (!fromVideo || fromVideo === toVideo || libOpenCourse == null) return;
+  // order comes from the FULL course list, not the filtered view, so the saved order stays complete
+  const order = ((lecturesByCourse()[libOpenCourse]) || []).map((l) => l.video);
+  const from = order.indexOf(fromVideo);
+  if (from < 0) return;
+  const [moved] = order.splice(from, 1);
+  const to = order.indexOf(toVideo);
+  if (to < 0) return;
+  order.splice(to, 0, moved);
+  library = await window.pywebview.api.reorder_lectures(libOpenCourse, order);
+  renderLibraryDetail();
+}
+
+function renderLecRow(l, opts = {}) {
   const row = document.createElement("div");
   row.className = "lec" + (l.missing ? " lec-missing" : "");
-  row.innerHTML = `<span class="lec-name">${l.missing ? "⚠" : "▶"} ${esc(l.title)}</span>`;
+  row.innerHTML =
+    (opts.drag ? '<span class="lec-grip" aria-hidden="true" title="גררו לשינוי הסדר">⋮⋮</span>' : "") +
+    `<span class="lec-name">${l.missing ? "⚠" : "▶"} ${esc(l.title)}</span>`;
+  if (opts.drag) addLecDragHandlers(row, l);
   if (l.missing) {
     // file unreachable right now (disconnected drive / OneDrive offline) — kept in the catalog,
     // just not playable; the ⋯ menu stays so the user can still remove/rename it.
@@ -1402,7 +1468,9 @@ function renderLibraryDetailList(lecs, q) {
     wrap.innerHTML = `<div class="courses-empty">${q ? "אין תוצאות." : "אין הרצאות בקורס הזה."}</div>`;
     return;
   }
-  for (const l of filtered) wrap.appendChild(renderLecRow(l));
+  // reordering is only offered on the unfiltered list — dragging within search results would move
+  // a lecture relative to rows the user can't see
+  for (const l of filtered) wrap.appendChild(renderLecRow(l, { drag: !q }));
 }
 
 $("libraryBtn").addEventListener("click", () => show("library"));
@@ -1648,6 +1716,22 @@ function showActionMenu(anchorEl, video, course, title) {
   moveRow.innerHTML = "<span>📁 קורס:</span>";
   moveRow.appendChild(sel);
   menu.appendChild(moveRow);
+
+  // export the transcript without opening the lecture (reads the saved SRT in Python)
+  const expRow = document.createElement("div");
+  expRow.className = "am-item am-move";
+  expRow.innerHTML = "<span>⬇ ייצוא תמליל:</span>";
+  for (const [fmt, label] of [["txt", "TXT"], ["docx", "Word"]]) {
+    const b = document.createElement("button");
+    b.className = "am-exp"; b.textContent = label;
+    b.onclick = async () => {
+      menu.remove();
+      const r = await window.pywebview.api.export_lecture(video, fmt);
+      if (r && String(r).startsWith("ERR")) alert(String(r).replace(/^ERR:\s*/, ""));
+    };
+    expRow.appendChild(b);
+  }
+  menu.appendChild(expRow);
 
   const browseBtn = document.createElement("button");
   browseBtn.className = "am-item"; browseBtn.textContent = "🌐 פתיחה בדפדפן";

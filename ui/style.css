@@ -621,6 +621,14 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
 /* lecture whose video file is unreachable right now — kept in the catalog, not playable */
 .lec-missing { opacity: 0.55; cursor: default; }
 .lec-missing:hover { background: none; }
+/* drag-to-reorder (course page) — mirrors the queue rows */
+.lec-grip {
+  flex: none; color: var(--muted); font-size: 12px; letter-spacing: -3px;
+  cursor: grab; user-select: none; opacity: 0; transition: opacity var(--dur) var(--ease);
+}
+.lec:hover .lec-grip { opacity: 0.6; }
+.lec.dragging { opacity: 0.45; }
+.lec.drag-over { border-radius: 9px; box-shadow: 0 -2px 0 var(--accent) inset; }
 .courses-empty { font-size: 12.5px; color: var(--muted); text-align: center; padding: 24px 8px; }
 
 /* ── course icons + emoji picker ── */
@@ -695,6 +703,13 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
   flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
   border-radius: 7px; padding: 5px 8px; font-family: inherit; font-size: 12.5px; direction: rtl;
 }
+/* transcript-export buttons inside the ⋯ menu */
+.am-exp {
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 7px; padding: 4px 12px; font-family: inherit; font-size: 12px;
+  font-weight: 600; cursor: pointer;
+}
+.am-exp:hover { border-color: var(--accent); color: var(--accent); }
 
 /* subtitle-appearance popover (player) */
 .submenu { min-width: 210px; gap: 8px; padding: 10px; }

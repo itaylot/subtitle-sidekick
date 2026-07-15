@@ -794,6 +794,22 @@ function confirmModal({ title, body, buttons }) {
   });
 }
 
+// ── drop marker, shared by both drag-reorder lists (queue rows + lecture rows) ──
+// The cursor's half of the row decides where the dragged item lands, and the marker line is drawn
+// on that same edge — so the line is a promise, not a guess. It also keeps the last slot reachable,
+// which "always insert before the target" never did.
+function markDropEdge(row, e) {
+  const b = row.getBoundingClientRect();
+  const after = e.clientY > b.top + b.height / 2;
+  row.classList.toggle("drop-after", after);
+  row.classList.toggle("drop-before", !after);
+  return after;
+}
+function clearDropMarks() {
+  document.querySelectorAll(".drop-before, .drop-after")
+    .forEach((el) => el.classList.remove("drop-before", "drop-after"));
+}
+
 // ── native HTML5 drag-and-drop reorder (queued items only) ──
 let dragId = null;
 function addDragHandlers(row, q) {
@@ -804,25 +820,29 @@ function addDragHandlers(row, q) {
   });
   row.addEventListener("dragend", () => {
     dragId = null; row.classList.remove("dragging");
-    document.querySelectorAll(".qitem.drag-over").forEach((el) => el.classList.remove("drag-over"));
+    clearDropMarks();
   });
-  row.addEventListener("dragenter", (e) => { e.preventDefault(); if (dragId && q.id !== dragId) row.classList.add("drag-over"); });
-  row.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; });
-  row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+  row.addEventListener("dragover", (e) => {
+    e.preventDefault(); e.dataTransfer.dropEffect = "move";
+    if (dragId && q.id !== dragId) markDropEdge(row, e);
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drop-before", "drop-after"));
   row.addEventListener("drop", (e) => {
     e.preventDefault(); e.stopPropagation();
-    row.classList.remove("drag-over");
-    reorderQueue(dragId, q.id);
+    const after = row.classList.contains("drop-after");
+    clearDropMarks();
+    reorderQueue(dragId, q.id, after);
   });
 }
-function reorderQueue(fromId, toId) {
+function reorderQueue(fromId, toId, after) {
   if (!fromId || fromId === toId) return;
   const from = queue.findIndex((x) => x.id === fromId);
   const target = queue.find((x) => x.id === toId);
   if (from < 0 || !target || target.status !== "queued") return;  // only reorder among queued
   const [moved] = queue.splice(from, 1);
-  const to = queue.findIndex((x) => x.id === toId);
-  queue.splice(to, 0, moved);
+  const to = queue.findIndex((x) => x.id === toId);   // recomputed after the removal
+  if (to < 0) return;
+  queue.splice(after ? to + 1 : to, 0, moved);
   renderQueue();
   saveQueueSoon();
 }
@@ -1191,15 +1211,9 @@ function addLecDragHandlers(row, l) {
     _dragVideo = null; row.classList.remove("dragging");
     clearDropMarks();
   });
-  // which half of the row the cursor is on decides where the lecture lands — so the marker line can
-  // sit exactly where it will drop (and the last slot stays reachable)
   row.addEventListener("dragover", (e) => {
     e.preventDefault(); e.dataTransfer.dropEffect = "move";
-    if (!_dragVideo || l.video === _dragVideo) return;
-    const b = row.getBoundingClientRect();
-    const after = e.clientY > b.top + b.height / 2;
-    row.classList.toggle("drop-after", after);
-    row.classList.toggle("drop-before", !after);
+    if (_dragVideo && l.video !== _dragVideo) markDropEdge(row, e);
   });
   row.addEventListener("dragleave", () => row.classList.remove("drop-before", "drop-after"));
   row.addEventListener("drop", (e) => {
@@ -1208,10 +1222,6 @@ function addLecDragHandlers(row, l) {
     clearDropMarks();
     reorderLectures(_dragVideo, l.video, after);
   });
-}
-function clearDropMarks() {
-  document.querySelectorAll(".lec.drop-before, .lec.drop-after")
-    .forEach((el) => el.classList.remove("drop-before", "drop-after"));
 }
 async function reorderLectures(fromVideo, toVideo, after) {
   if (!fromVideo || fromVideo === toVideo || libOpenCourse == null) return;

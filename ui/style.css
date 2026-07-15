@@ -544,7 +544,11 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
 }
 .lib-detail-act:hover { color: var(--accent); background: var(--panel); }
 .lib-detail-search { width: 100%; margin-bottom: 12px; }
-.lib-detail-list { display: flex; flex-direction: column; gap: 4px; }
+.lib-detail-list { display: flex; flex-direction: column; gap: 0; }
+/* hairline between lectures: the rows are full-width here, so without it the ⋯ on the far side
+   can't be tied to a title by eye */
+.lib-detail-list .lec { border-radius: 0; padding-block: 10px; }
+.lib-detail-list .lec + .lec { border-top: 1px solid var(--hairline); }
 
 /* ── sidebar: my courses ── */
 .drawer-ov {
@@ -628,7 +632,9 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
 }
 .lec:hover .lec-grip { opacity: 0.6; }
 .lec.dragging { opacity: 0.45; }
-.lec.drag-over { border-radius: 9px; box-shadow: 0 -2px 0 var(--accent) inset; }
+/* the marker sits exactly where the row will land — above or below the row under the cursor */
+.lec.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.lec.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 .courses-empty { font-size: 12.5px; color: var(--muted); text-align: center; padding: 24px 8px; }
 
 /* ── course icons + emoji picker ── */

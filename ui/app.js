@@ -1180,30 +1180,40 @@ function addLecDragHandlers(row, l) {
   });
   row.addEventListener("dragend", () => {
     _dragVideo = null; row.classList.remove("dragging");
-    document.querySelectorAll(".lec.drag-over").forEach((el) => el.classList.remove("drag-over"));
+    clearDropMarks();
   });
-  row.addEventListener("dragenter", (e) => {
-    e.preventDefault();
-    if (_dragVideo && l.video !== _dragVideo) row.classList.add("drag-over");
+  // which half of the row the cursor is on decides where the lecture lands — so the marker line can
+  // sit exactly where it will drop (and the last slot stays reachable)
+  row.addEventListener("dragover", (e) => {
+    e.preventDefault(); e.dataTransfer.dropEffect = "move";
+    if (!_dragVideo || l.video === _dragVideo) return;
+    const b = row.getBoundingClientRect();
+    const after = e.clientY > b.top + b.height / 2;
+    row.classList.toggle("drop-after", after);
+    row.classList.toggle("drop-before", !after);
   });
-  row.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; });
-  row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+  row.addEventListener("dragleave", () => row.classList.remove("drop-before", "drop-after"));
   row.addEventListener("drop", (e) => {
     e.preventDefault(); e.stopPropagation();
-    row.classList.remove("drag-over");
-    reorderLectures(_dragVideo, l.video);
+    const after = row.classList.contains("drop-after");
+    clearDropMarks();
+    reorderLectures(_dragVideo, l.video, after);
   });
 }
-async function reorderLectures(fromVideo, toVideo) {
+function clearDropMarks() {
+  document.querySelectorAll(".lec.drop-before, .lec.drop-after")
+    .forEach((el) => el.classList.remove("drop-before", "drop-after"));
+}
+async function reorderLectures(fromVideo, toVideo, after) {
   if (!fromVideo || fromVideo === toVideo || libOpenCourse == null) return;
   // order comes from the FULL course list, not the filtered view, so the saved order stays complete
   const order = ((lecturesByCourse()[libOpenCourse]) || []).map((l) => l.video);
   const from = order.indexOf(fromVideo);
   if (from < 0) return;
   const [moved] = order.splice(from, 1);
-  const to = order.indexOf(toVideo);
+  const to = order.indexOf(toVideo);      // recomputed after the removal, so the index is still valid
   if (to < 0) return;
-  order.splice(to, 0, moved);
+  order.splice(after ? to + 1 : to, 0, moved);
   library = await window.pywebview.api.reorder_lectures(libOpenCourse, order);
   renderLibraryDetail();
 }

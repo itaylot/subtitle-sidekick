@@ -631,6 +631,12 @@ body.dark .themetoggle .ic-sun  { opacity: 1; transform: rotate(0) scale(1); }
   cursor: grab; user-select: none; opacity: 0; transition: opacity var(--dur) var(--ease);
 }
 .lec:hover .lec-grip { opacity: 0.6; }
+/* "watched X%" on a partly-played lecture (auto-flips to ✓ at 75%) */
+.lec-prog {
+  flex: none; font-size: 10.5px; font-weight: 600; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
 .lec.dragging { opacity: 0.45; }
 /* the marker sits exactly where the row will land — above or below the row under the cursor */
 .lec.drop-before { box-shadow: inset 0 2px 0 var(--accent); }

@@ -106,9 +106,18 @@ function show(view) {
 
 // where "back" in the player leads — set based on which screen we came from
 let returnView = "open";
+let returnCourse = null;   // the course page we came from: show("library") resets libOpenCourse, so
+                           // without this, back always dumps you on the courses grid
 function setReturnView(v) {
   returnView = v;
-  $("backBtn").title = v === "proc" ? "חזרה לתור" : "חזרה לרשימה";
+  returnCourse = v === "library" ? libOpenCourse : null;
+  $("backBtn").title = v === "proc" ? "חזרה לתור"
+    : (v === "library" && returnCourse != null) ? "חזרה לקורס" : "חזרה לרשימה";
+}
+// go back to exactly the screen the player was opened from, including the open course page
+function goBackFromPlayer() {
+  show(returnView);
+  if (returnView === "library" && returnCourse != null) openLibraryCourse(returnCourse);
 }
 
 // ── background transcription indicator in the top bar: visible from any screen ──
@@ -1085,7 +1094,7 @@ video.addEventListener("timeupdate", () => {
 
 $("backBtn").addEventListener("click", () => {
   video.pause();
-  show(returnView);
+  goBackFromPlayer();
 });
 
 function clock(sec) {
@@ -1232,6 +1241,16 @@ function renderLecRow(l, opts = {}) {
   } else {
     row.onclick = () => openLecture(l.video);
   }
+  // partly-watched lectures show how far in they are; at VIEWED_AT (75%) Python flips them to ✓
+  const r = getResume(l.video);
+  const pct = r && r.dur ? Math.round((r.pos / r.dur) * 100) : 0;
+  if (!l.viewed && pct >= 1) {
+    const prog = document.createElement("span");
+    prog.className = "lec-prog";
+    prog.textContent = `הושלם ${pct}%`;
+    row.appendChild(prog);
+  }
+
   const seen = document.createElement("button");
   seen.className = "lec-seen" + (l.viewed ? " on" : "");
   seen.textContent = l.viewed ? "✓" : "○";

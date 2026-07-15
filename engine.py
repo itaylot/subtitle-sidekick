@@ -376,15 +376,30 @@ def load_resume():
     return data
 
 
+VIEWED_AT = 0.75   # play this share of a lecture and it counts as watched
+
+
 def save_resume(video, pos, dur=0):
-    """Remember where the user stopped in a lecture, and which lecture was last open."""
+    """Remember where the user stopped in a lecture, and which lecture was last open.
+
+    Also flips `viewed` on once VIEWED_AT of the lecture has been played — the one place playback
+    progress is known, so the rule lives here rather than in the UI.
+    """
     video = os.path.abspath(video) if video else ""
     if not video:
         return load_resume()
     data = load_resume()
-    data["positions"][video] = {"pos": float(pos or 0), "dur": float(dur or 0)}
+    pos, dur = float(pos or 0), float(dur or 0)
+    data["positions"][video] = {"pos": pos, "dur": dur}
     data["last"] = video
     _write_json_atomic(RESUME_PATH, data)
+
+    if dur > 0 and pos / dur >= VIEWED_AT:
+        lib = load_library()
+        lec = next((l for l in lib["lectures"] if l.get("video") == video), None)
+        if lec and not lec.get("viewed"):     # only write when it actually flips — this runs every few seconds
+            lec["viewed"] = True
+            save_library(lib)
     return data
 
 
@@ -685,14 +700,15 @@ def parse_srt(srt):
 
 
 def open_lecture(video):
-    """Returns {video, cues, srt} for a saved lecture — reads SRT from disk. Marks as viewed."""
+    """Returns {video, cues, srt} for a saved lecture — reads SRT from disk.
+
+    Deliberately does NOT mark it viewed: opening a lecture isn't watching it. "Viewed" is either
+    set by hand (the ○/✓ button) or automatically once VIEWED_AT of it has been played — see
+    save_resume().
+    """
     video = os.path.abspath(video)
-    data = load_library()
-    lec = next((l for l in data["lectures"] if l.get("video") == video), None)
+    lec = next((l for l in load_library()["lectures"] if l.get("video") == video), None)
     srt = (lec or {}).get("srt") or (os.path.splitext(video)[0] + ".srt")
-    if lec and not lec.get("viewed"):
-        lec["viewed"] = True
-        save_library(data)
     return {"video": video, "cues": parse_srt(srt), "srt": srt}
 
 
@@ -992,6 +1008,24 @@ if __name__ == "__main__":
     _again = load_library()
     assert "recovered" not in _again                 # one-time only — the file is no longer missing
     LIB_PATH, LIB_DIR = _old_path, _old_dir
+    shutil.rmtree(_lib, ignore_errors=True)
+
+    # viewed: opening never marks it; playback flips it only once VIEWED_AT is reached
+    _lib = tempfile.mkdtemp()
+    _old_path, _old_dir, _old_res = LIB_PATH, LIB_DIR, RESUME_PATH
+    LIB_DIR, LIB_PATH = _lib, os.path.join(_lib, "library.json")
+    RESUME_PATH = os.path.join(_lib, "resume.json")
+    _v = os.path.abspath("lec.mp4")
+    save_library({"courses": [], "lectures": [{"video": _v, "srt": "none.srt", "title": "t", "viewed": False}]})
+    _viewed = lambda: load_library()["lectures"][0]["viewed"]
+    open_lecture(_v)
+    assert _viewed() is False, "opening a lecture must not mark it watched"
+    save_resume(_v, 50, 100)                      # 50% — still watching
+    assert _viewed() is False, "50% must not mark it watched"
+    save_resume(_v, 75, 100)                      # exactly VIEWED_AT
+    assert _viewed() is True, "75% must mark it watched"
+    assert load_resume()["positions"][_v]["pos"] == 75
+    LIB_PATH, LIB_DIR, RESUME_PATH = _old_path, _old_dir, _old_res
     shutil.rmtree(_lib, ignore_errors=True)
 
     # reorder_lectures: reorders one course in place, never disturbs other courses
